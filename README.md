@@ -121,7 +121,7 @@ php tools/dominance-report.php   # per-stage dominance with option labels
 php bin/verify-api.php           # lifecycle, idempotency, chain, profiles
 php bin/verify-glossary.php      # glossary covers every dimension, rule, instrument, setting
 php bin/verify-ratelimit.php     # rate-limit decisions per client, action and window
-php bin/verify-meta.php          # static metadata: title, canonical, OG, JSON-LD, robots, llms.txt
+php bin/verify-meta.php          # metadata + discovery files; --require-build insists public/app/ exists
 php bin/verify-contrast.php      # WCAG contrast ratios and target sizes, measured
 php bin/verify-http.php          # HTTP contract for the SPA
 php bin/verify-deploy.php --base=https://boardsim.iliadis.net   # a live origin
@@ -212,6 +212,13 @@ stamped by `bin/build-deploy.php`) and `llms.txt` (the llmstxt.org shape: what t
 product is, its endpoints, and what it is not). `bin/verify-meta.php` asserts the
 whole set in source, in the build output and in the routing rules;
 `bin/verify-deploy.php` re-asserts it against the live origin.
+
+`public/app/` is generated and gitignored, so the build-output half of
+`verify-meta.php` is reported as **SKIP** on a clean checkout rather than failing —
+a check must not depend on whether someone has run the front-end build. CI runs
+it twice: once as-is for the source and discovery files, and once with
+`--require-build` in the front-end job, after `npm run build`, where the absence of
+the shell really is a failure.
 
 ### Licence
 
