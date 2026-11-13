@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  specification:
+    name: Pinned specification and content
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # .gitattributes normalises everything to LF; a CRLF checkout would change
+      # the pinned bytes and fail the manifest, so do not "fix" that here.
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, json
+          coverage: none
+      - name: PHP syntax
+        run: php bin/verify-lint.php
+      - name: Repository hygiene (no host paths)
+        run: php bin/verify-hygiene.php
+      - name: Pinned manifest (29 files)
+        run: php bin/verify-manifest.php
+      - name: Scenario YAML parses
+        run: php tools/smoke-yaml.php
+      - name: Scoring policy loads
+        run: php tools/smoke-policy.php
+      - name: Regulatory bundle validates
+        run: php bin/content-build.php --check
+
+  engine:
+    name: Engine invariants
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, json
+          coverage: none
+      - name: Regulatory evaluator
+        run: php bin/verify-regulatory.php
+      - name: Scoring goldens and determinism
+        run: php bin/verify-scoring.php
+      - name: API contract (205+ assertions)
+        run: php bin/verify-api.php
+      - name: HTTP router contract
+        run: php bin/verify-http.php
+      - name: Glossary drift
+        run: php bin/verify-glossary.php
+      - name: Rate limiter decisions
+        run: php bin/verify-ratelimit.php
+      - name: Static metadata and crawler discovery
+        run: php bin/verify-meta.php
+      - name: Contrast and target sizes
+        run: php bin/verify-contrast.php
+
+  web:
+    name: Front-end build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install
+        working-directory: web
+        run: npm ci
+      - name: Type-check and build
+        working-directory: web
+        run: npm run build
+      - name: The build is the artefact deploy expects
+        run: test -f public/app/index.html

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- Identity and discovery. Everything here is in the served HTML, so a
+         crawler, a social-preview bot or a language model sees it without
+         executing the SPA. Any change must keep bin/verify-meta.php green. -->
+    <title>BoardSim | Executive decision-making under pressure</title>
+    <meta
+      name="description"
+      content="BoardSim is a board-level executive cybersecurity decision simulator. Make the decision, defend the decision, see the consequences — scored deterministically against a published policy."
+    />
+    <link rel="canonical" href="https://boardsim.iliadis.net/" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+    <meta name="theme-color" content="#075e65" />
+
+    <meta name="author" content="Dr. John Iliadis" />
+    <link rel="author" href="https://www.iliadis.net/" />
+    <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
+    <link rel="icon" href="/app/favicon.svg" type="image/svg+xml" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="BoardSim" />
+    <meta property="og:title" content="BoardSim | Executive decision-making under pressure" />
+    <meta
+      property="og:description"
+      content="Make the decision, defend the decision, see the consequences. A deterministic, rule-traced cybersecurity decision simulator for boards and executives."
+    />
+    <meta property="og:url" content="https://boardsim.iliadis.net/" />
+    <meta property="og:locale" content="en_GB" />
+
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="BoardSim | Executive decision-making under pressure" />
+    <meta
+      name="twitter:description"
+      content="Make the decision, defend the decision, see the consequences. A deterministic, rule-traced cybersecurity decision simulator for boards and executives."
+    />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "BoardSim",
+        "alternateName": "BoardSim — Executive decision-making under pressure",
+        "url": "https://boardsim.iliadis.net/",
+        "description": "A board-level executive cybersecurity decision simulator. Four stages, three options each, a deterministic score computed on the server from a published rule set, with a rule-by-rule trace, replay and a separate regulatory assessment that never alters the score.",
+        "applicationCategory": "BusinessApplication",
+        "applicationSubCategory": "Cybersecurity decision simulation",
+        "operatingSystem": "Any modern web browser",
+        "browserRequirements": "Requires JavaScript. Current Chrome, Edge, Firefox or Safari.",
+        "inLanguage": "en",
+        "isAccessibleForFree": true,
+        "author": {
+          "@type": "Person",
+          "name": "Dr. John Iliadis",
+          "url": "https://www.iliadis.net/"
+        },
+        "publisher": {
+          "@type": "Person",
+          "name": "Dr. John Iliadis",
+          "url": "https://www.iliadis.net/"
+        },
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "EUR"
+        },
+        "featureList": [
+          "Four-stage board scenario with three options per stage",
+          "Deterministic server-authoritative scoring across ten weighted dimensions",
+          "Rule-by-rule score trace, hash-chained event log and replay",
+          "Separate regulatory assessment that never alters the score",
+          "Shareable read-only result links"
+        ]
+      }
+    </script>
+  </head>
+  <body>
+    <noscript>
+      <div class="bs-noscript">
+        <h1>BoardSim — Executive Decision-Making Under Pressure</h1>
+        <p>
+          BoardSim is a board-level executive cybersecurity decision simulator with a
+          deterministic, server-authoritative scoring engine. The interface requires
+          JavaScript. The underlying engine is available as a JSON API at
+          <code>/v1/health</code>.
+        </p>
+      </div>
+    </noscript>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

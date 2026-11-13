@@ -1,0 +1,157 @@
+# BoardSim — what never leaves this machine.
+#
+# This repository is public. Anything committed is world-readable for ever, so
+# this file is the boundary: secrets, host details, generated output and local
+# tool state stay out. `php bin/verify-hygiene.php` fails the check if something
+# on these lists is nevertheless tracked, and also fails if a file a fresh clone
+# needs (an example config, a lockfile, the discovery files) is missing.
+
+# ─── Secrets and local configuration ────────────────────────────────────────
+# Never commit credentials. Nothing in this project needs one at build time.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+*.ppk
+id_rsa*
+id_ed25519*
+.ssh/
+.htpasswd
+.user.ini
+.npmrc
+auth.json
+config.local.php
+secrets.php
+.deploy-credentials
+
+# ─── Deployment target (host paths, never committed) ────────────────────────
+# deploy/host.config.example.php is the committed template; the real file holds
+# the cPanel account, docroot and backend paths and must stay local.
+deploy/host.config.php
+**/host.config.php
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+
+# Generated artefacts: bin/build-deploy.php writes the two upload folders and
+# the release stamp here. Regenerated from the checkout, never committed.
+build/
+build/deploy/
+
+# ─── Databases, dumps and local data ────────────────────────────────────────
+*.sqlite
+*.sqlite3
+*.db
+*.sql.gz
+*.dump
+/dumps/
+/mysql-data/
+
+# ─── PHP dependencies and tooling ───────────────────────────────────────────
+/vendor/
+composer.phar
+.auth.json
+.phpunit.result.cache
+.phpunit.cache/
+.phpstan/
+/phpstan/
+/tools/vendor/
+*.cache
+.php-cs-fixer.cache
+
+# ─── Front-end build (Node is a dev-time tool only, never a runtime need) ───
+node_modules/
+/public/assets/
+# The SPA build output is generated from web/ into public/app; bin/build-deploy.php
+# copies it into the document-root tree. Regenerated, never committed.
+/public/app/
+/dist/
+.vite/
+*.tsbuildinfo
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.eslintcache
+.stylelintcache
+
+# ─── Generated reports, coverage and test output ────────────────────────────
+# Enumeration output is reproducible from the pinned bundle, so it is not
+# committed. Regenerate with: php bin/enumerate.php
+/reports/
+/coverage/
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+blob-report/
+clover.xml
+coverage.xml
+*.sarif
+*.prof
+
+# ─── Runtime and generated state ────────────────────────────────────────────
+/var/
+*.log
+/logs/
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+*~
+/tmp/
+/scratch/
+
+# ─── Local notes and machine-specific overrides ─────────────────────────────
+# Drafts, dumps and overrides live beside the work but are not the work.
+*.local.md
+*.local.json
+*.local.yaml
+*.local.yml
+*.local.ts
+*.local.css
+*.local.php
+!*.local.example.php
+!config.local.example.php
+AGENTS.local.md
+*.docx
+*.xlsx
+*.pptx
+
+# ─── Editors, agents and operating systems ──────────────────────────────────
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+*.lnk
+~$*
+.claude/
+.cursor/
+.aider*
+.continue/
+.windsurf/
+.specstory/
+.history/
+.roo/
+.gemini/
+.codex/
+.openai/
+.copilot/
+.clinerules
+
+# ─── Deliberately tracked, do not add to this file ──────────────────────────
+# web/package-lock.json   reproducible front-end build
+# content/bundles/        immutable, hashed artefacts that a run pins to
+# .env.example, config.local.example.php, deploy/host.config.example.php
+# public/robots.txt, public/sitemap.xml, public/llms.txt   crawler/agent entry points
+

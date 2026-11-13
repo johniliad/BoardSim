@@ -1,0 +1,133 @@
+# BoardSim — F-2 Layer 0: closed predicate vocabulary
+#
+# Every variable used in any instrument scope_expr or trigger_expr, and every
+# key used by a scenario regulatory fact, must be declared here. The loader
+# rejects the bundle if an expression references an undeclared name, so a typo
+# can never silently degrade to `unknown` (defect B-7).
+#
+# Governance: this file authors *predicate semantics*, not law. The legal
+# instruments themselves are authoritative in regulatory_instruments.yaml.
+
+schema_version: "1.0.0"
+overlay_id: "predicate_vocabulary"
+source_kind: AUTHORITATIVE_SOURCE
+counsel_reviewed: false
+psychometrically_calibrated: false
+
+predicates:
+  # --- Entity, role and product scope ---
+  entity_in_scope:
+    type: tri_bool
+    description: Entity falls within the sector and size thresholds of the instrument.
+  national_transposition_applicable:
+    type: tri_bool
+    description: The relevant Member State transposition applies to this entity and date.
+  listed_digital_provider_or_trust_service:
+    type: tri_bool
+    description: Entity is a listed digital infrastructure, digital provider or trust service provider.
+  personal_data_processing:
+    type: tri_bool
+    description: The processing in question concerns personal data.
+  role_confirmed:
+    type: tri_bool
+    description: Controller or processor role has been established for the affected processing.
+  controller:
+    type: tri_bool
+    description: The entity determines purposes and means of the affected processing.
+  dora_financial_entity:
+    type: tri_bool
+    description: Entity is a financial entity within the DORA scope of Regulation 2022/2554.
+  relevant_ict_third_party:
+    type: tri_bool
+    description: An ICT third-party service provider supports a function in scope.
+  relevant_arrangement:
+    type: tri_bool
+    description: A contractual ICT third-party arrangement is in scope.
+  manufacturer_scoped_product:
+    type: tri_bool
+    description: Entity is a manufacturer of a product with digital elements in CRA scope.
+  high_risk_ai_in_scope:
+    type: tri_bool
+    description: The AI system is high-risk and within the AI Act scope.
+  deployer_of_high_risk_ai:
+    type: tri_bool
+    description: Entity deploys, rather than provides, the high-risk AI system.
+  provider_high_risk_ai:
+    type: tri_bool
+    description: Entity places the high-risk AI system on the market or puts it into service.
+  greek_entity_and_scoped:
+    type: tri_bool
+    description: Entity is established in Greece and within the scope of Law 5160/2024.
+
+  # --- Incident, materiality and legal character ---
+  significant_incident_confirmed:
+    type: tri_bool
+    description: The incident meets the instrument's significance criteria on authored facts.
+  personal_data_breach_confirmed:
+    type: tri_bool
+    description: A personal data breach has been established, not merely suspected.
+  risk_not_unlikely:
+    type: tri_bool
+    description: The breach is not unlikely to result in a risk to rights and freedoms.
+  high_risk_to_individuals:
+    type: tri_bool
+    description: The breach is likely to result in a high risk to rights and freedoms.
+  solely_automated_decision:
+    type: tri_bool
+    description: The decision is based solely on automated processing.
+  legal_or_similarly_significant_effect:
+    type: tri_bool
+    description: The automated decision produces legal or similarly significant effects.
+  dora_major_ict_incident_classified:
+    type: tri_bool
+    description: The ICT-related incident is classified as major under DORA Art. 18 criteria.
+  classification_data_available:
+    type: tri_bool
+    description: Data needed for the DORA 2024/1772 classification thresholds is available.
+  reportable_event:
+    type: tri_bool
+    description: An actively exploited vulnerability or severe incident in CRA scope.
+  serious_incident_confirmed:
+    type: tri_bool
+    description: A serious incident as defined by the AI Act has been established.
+  applicable_effective_date:
+    type: tri_bool
+    description: The instrument's applicable date has been reached for this entity.
+
+  # --- Timestamps and awareness ---
+  awareness_time_known:
+    type: tri_bool
+    description: The entity has a recorded moment of legal awareness.
+  classification_timestamp_known:
+    type: tri_bool
+    description: The moment of formal incident classification is recorded.
+  date_at_least_2026_09_11:
+    type: tri_bool
+    description: The simulated date has reached the CRA Art. 14 reporting start date.
+
+  # --- Timestamp-valued facts (ISO-8601, UTC) ---
+  awareness_time:
+    type: timestamp_iso8601
+    description: Moment the entity had a reasonable degree of certainty.
+  classification_time:
+    type: timestamp_iso8601
+    description: Moment the incident was formally classified.
+
+  # --- Operational timestamps that may anchor projection timers ---
+  internal_escalation_started_at:
+    type: timestamp_iso8601
+    description: Start of an internal escalation tracker. Never a statutory deadline.
+
+timer_events:
+  notification_submitted_at:
+    description: Actual submission of the incident notification. Absent means projection only.
+  initial_notification_submitted_at:
+    description: Actual submission of the DORA initial notification. Absent means projection only.
+  latest_intermediate_submitted_at:
+    description: Actual submission of the latest DORA intermediate report. Absent means projection only.
+
+fact_source_kinds:
+  - SIMULATION_ASSUMPTION
+  - REGULATORY_ASSERTION
+  - SCENARIO_INJECT
+  - PLAYER_ACTION

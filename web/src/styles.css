@@ -1,0 +1,158 @@
+/* BoardSim — shared design system.
+ *
+ * Token names and values are copied verbatim from iliadis.net and ThreatPulse so
+ * the three properties stay in sync. Component classes use the `bs-` prefix
+ * (matching `tp-` and `eucyber-`), hand-written CSS with no framework. */
+
+:root {
+  color-scheme: light;
+  --color-ink: #142b3b;
+  --color-heading: #102a3a;
+  --color-muted: #526675;
+  --color-paper: #ffffff;
+  --color-canvas: #f3f7f8;
+  --color-border: #dce6e9;
+  --color-accent: #087e83;
+  --color-accent-strong: #075e65;
+  --color-accent-soft: #e7f4f2;
+  --color-focus: #8a4b00;
+  --color-focus-ring: #f2c078;
+  --color-danger: #a32d2d;
+  /* Light-green hairline used by footer rules on iliadis.net and ThreatPulse. */
+  --color-rule-green: #a8d5cd;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+  --space-9: 5rem;
+
+  --content-width: 70rem;
+  --reading-width: 48rem;
+  --page-gutter: 1.5rem;
+  --radius-control: 0.25rem;
+  --radius-card: 0.25rem;
+  --radius-image: 0.5rem;
+  --shadow-raised: 0 1px 2px #102a3a14;
+  --focus-outline: 3px solid var(--color-focus);
+  --focus-offset: 3px;
+
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "Cascadia Mono", "Segoe UI Mono", Menlo, Consolas, monospace;
+
+  --sev-critical-fg: #8a2020; --sev-critical-bg: #fbeeee; --sev-critical-border: #e6c3c3;
+  --sev-high-fg: #8a3d12;     --sev-high-bg: #fdf2ea;     --sev-high-border: #ecd3bf;
+  --sev-medium-fg: #6b5200;   --sev-medium-bg: #fbf7e6;   --sev-medium-border: #e8dcae;
+  --sev-low-fg: #46596a;      --sev-low-bg: #eef2f4;      --sev-low-border: #d5dfe4;
+  --sev-none-fg: #3d5c46;     --sev-none-bg: #eef5f0;     --sev-none-border: #cfe0d5;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 { color: var(--color-heading); line-height: 1.25; margin: 0 0 var(--space-3); }
+h1 { font-size: clamp(1.75rem, 4vw, 2.5rem); }
+h2 { font-size: clamp(1.35rem, 2.6vw, 1.75rem); }
+h3 { font-size: 1.125rem; }
+p { margin: 0 0 var(--space-3); }
+ul, ol { margin: 0 0 var(--space-3); padding-left: var(--space-5); }
+
+a { color: var(--color-accent-strong); text-underline-offset: 0.15em; }
+a:hover { color: var(--color-accent); }
+:focus-visible { outline: var(--focus-outline); outline-offset: var(--focus-offset); }
+code, .bs-mono { font-family: var(--font-mono); font-size: 0.875rem; }
+
+.bs-skip {
+  position: absolute; left: -9999px; top: 0; z-index: 100;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-accent-strong); color: var(--color-paper); font-weight: 700;
+}
+.bs-skip:focus { left: var(--space-3); top: var(--space-3); }
+
+.bs-container, .bs-header__inner, .bs-footer__inner {
+  width: min(var(--content-width), calc(100% - 2 * var(--page-gutter)));
+  margin-inline: auto;
+}
+.bs-reading { max-width: var(--reading-width); }
+.bs-stack { display: grid; gap: var(--space-4); min-width: 0; }
+.bs-inline { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.bs-grid { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+
+/* A grid or flex child defaults to min-width:auto, which is its content's
+ * min-content width — for a <select> that is the longest option string. Without
+ * this, a field with a long option overflowed its track and painted over the
+ * field beside it (Difficulty over Risk appetite). */
+.bs-grid > * { min-width: 0; }
+
+/* Form field: label above control, both able to shrink. */
+.bs-field { display: grid; gap: 0.35rem; min-width: 0; }
+.bs-field > span { font-size: 0.85rem; font-weight: 600; }
+.bs-field > select, .bs-field > input, .bs-field > textarea {
+  width: 100%; max-width: 100%; min-width: 0;
+}
+
+/* A select is a control, not an action: it must not borrow .bs-button's filled
+ * accent treatment, which reads as "press me". */
+.bs-select, .bs-input {
+  width: 100%; min-height: 46px; padding: 0.55rem 0.75rem;
+  border: 1px solid var(--color-border); border-radius: var(--radius-control);
+  background: var(--color-paper); color: var(--color-ink); font: inherit;
+}
+.bs-select:hover, .bs-input:hover { border-color: var(--color-accent); }
+
+/* ─── Utilities ──────────────────────────────────────────────────────────────
+ * Single-purpose classes used in place of inline `style` attributes, so the
+ * Content-Security-Policy can forbid inline styles outright. Named by effect,
+ * not by value, so a token change moves every use with it. */
+.bs-m-0 { margin: 0; }
+.bs-mt-0 { margin-top: 0; }
+.bs-mt-tight { margin-top: 0.35rem; }
+.bs-mt-3 { margin-top: var(--space-3); }
+.bs-mt-4 { margin-top: var(--space-4); }
+.bs-mt-5 { margin-top: var(--space-5); }
+.bs-mt-6 { margin-top: var(--space-6); }
+.bs-mb-5 { margin-bottom: var(--space-5); }
+.bs-mb-6 { margin-bottom: var(--space-6); }
+.bs-mb-tight { margin-bottom: 0.2rem; }
+.bs-p-0 { padding: 0; }
+.bs-m-0-fs-110 { margin: 0; font-size: 1.1rem; }
+.bs-items-start { align-items: flex-start; }
+.bs-justify-between { justify-content: space-between; }
+.bs-justify-between-start { justify-content: space-between; align-items: flex-start; }
+.bs-gap-2 { gap: var(--space-2); }
+.bs-list-plain { list-style: none; padding-left: 0; gap: var(--space-3); }
+.bs-muted-90 { color: var(--color-muted); font-size: 0.9rem; }
+.bs-muted-72 { color: var(--color-muted); font-size: 0.72rem; }
+.bs-muted-mb-2 { color: var(--color-muted); margin: 0 0 var(--space-2); }
+.bs-muted-mb-3 { color: var(--color-muted); margin: 0 0 var(--space-3); }
+.bs-muted-list { font-size: 0.85rem; color: var(--color-muted); padding-left: 1.1rem; }
+.bs-fs-100 { font-size: 1rem; }
+.bs-fs-110 { font-size: 1.1rem; }
+.bs-fs-115 { font-size: 1.15rem; }
+.bs-h-stage { font-size: clamp(1.35rem, 2.6vw, 1.75rem); }
+.bs-fw-500 { font-weight: 500; }
+.bs-caption { padding: 0.75rem 1rem; color: var(--color-muted); text-align: left; }
+.bs-clickable { cursor: pointer; padding: var(--space-3) var(--space-4); }
+.bs-pre { font-family: var(--font-mono); overflow-x: auto; }
+.bs-field-narrow { max-width: 28rem; margin: var(--space-4) 0; }
+.bs-break-all { word-break: break-all; }
+
+/* Shown only when JavaScript is unavailable; styled here rather than with an
+ * inline attribute so the CSP can forbid inline styles outright. */
+.bs-noscript {
+  max-width: 46rem; margin: 3rem auto; padding: 0 1.5rem;
+  font-family: var(--font-sans); color: var(--color-ink);
+}

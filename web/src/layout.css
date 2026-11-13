@@ -1,0 +1,99 @@
+/* Tables */
+.bs-table-wrap {
+  overflow-x: auto; border: 1px solid var(--color-border);
+  border-radius: var(--radius-card); background: var(--color-paper);
+}
+.bs-table { width: 100%; min-width: 34rem; border-collapse: collapse; font-size: 0.9375rem; }
+.bs-table th, .bs-table td {
+  padding: var(--space-3) var(--space-4); text-align: left;
+  vertical-align: top; border-bottom: 1px solid var(--color-border);
+}
+.bs-table thead th {
+  background: var(--color-canvas); color: var(--color-heading);
+  font-size: 0.8125rem; letter-spacing: 0.04em; text-transform: uppercase;
+}
+.bs-table tbody tr:last-child td { border-bottom: 0; }
+.bs-num { font-variant-numeric: tabular-nums; text-align: right; }
+
+/* Choice cards — the core interaction */
+.bs-choices { display: grid; gap: var(--space-4); }
+.bs-choice {
+  display: grid; gap: var(--space-2); padding: var(--space-5); text-align: left;
+  border: 1px solid var(--color-border); border-radius: var(--radius-card);
+  background: var(--color-paper); color: inherit; font: inherit; cursor: pointer;
+}
+.bs-choice:hover { border-color: var(--color-accent); background: var(--color-accent-soft); }
+.bs-choice[aria-pressed="true"] {
+  border-color: var(--color-accent-strong); box-shadow: inset 0 0 0 1px var(--color-accent-strong);
+}
+.bs-choice__id {
+  display: inline-grid; place-items: center; width: 1.75rem; height: 1.75rem;
+  border-radius: var(--radius-control); background: var(--color-accent-strong);
+  color: var(--color-paper); font-size: 0.8rem; font-weight: 700;
+}
+.bs-choice__label { font-weight: 600; color: var(--color-heading); }
+.bs-choice__meta { color: var(--color-muted); font-size: 0.8125rem; }
+
+/* Notices */
+.bs-notice {
+  padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-accent); border-radius: var(--radius-control);
+  background: var(--color-canvas); color: var(--color-muted); font-size: 0.9rem;
+}
+.bs-notice--critical { border-left-color: var(--sev-critical-fg); background: var(--sev-critical-bg); color: var(--sev-critical-fg); }
+
+/* Progress */
+.bs-progress { display: flex; gap: var(--space-2); margin: var(--space-3) 0 0; padding: 0; list-style: none; }
+.bs-progress li {
+  flex: 1; padding-top: var(--space-2); border-top: 3px solid var(--color-border);
+  color: var(--color-muted); font-size: 0.78rem; font-weight: 600;
+}
+.bs-progress li[data-state="done"] { border-top-color: var(--color-accent); color: var(--color-ink); }
+.bs-progress li[data-state="current"] { border-top-color: var(--color-accent-strong); color: var(--color-accent-strong); }
+
+/* Footer */
+.bs-footer {
+  margin-top: var(--space-9); padding: var(--space-6) 0;
+  border-top: 1px solid var(--color-rule-green); background: var(--color-paper);
+}
+.bs-footer__inner {
+  display: flex; flex-wrap: wrap; align-items: flex-start;
+  justify-content: space-between; gap: var(--space-4) var(--space-6);
+}
+.bs-footer__meta {
+  display: grid; gap: var(--space-2); justify-items: end; text-align: right;
+}
+.bs-footer p { margin: 0; color: var(--color-muted); font-size: 0.8125rem; max-width: 32rem; }
+.bs-byline {
+  display: flex; flex-wrap: wrap; align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+  color: var(--color-heading); font-size: 0.8125rem; font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.bs-byline a {
+  color: var(--color-accent-strong); font-weight: 650; text-decoration: none;
+  border-bottom: 1px solid var(--color-rule-green);
+}
+.bs-byline a:hover, .bs-byline a:focus-visible {
+  color: var(--color-accent); border-bottom-color: var(--color-accent);
+}
+.bs-byline__dot { color: var(--color-rule-green); }
+.bs-byline__role { color: var(--color-muted); font-weight: 500; }
+
+@media (max-width: 47.5rem) {
+  .bs-hero__inner { grid-template-columns: 1fr; padding-block: var(--space-7) var(--space-6); }
+  .bs-header__inner { flex-direction: column; align-items: flex-start; padding-block: var(--space-3); }
+  .bs-nav { width: 100%; }
+  .bs-nav a { padding: var(--space-2); font-size: 0.86rem; }
+  .bs-section { padding: var(--space-7) 0; }
+  .bs-card, .bs-kpi { padding: var(--space-4); }
+  .bs-footer__meta { justify-items: start; text-align: left; }
+  .bs-byline { justify-content: flex-start; }
+  .bs-hero__inner, .bs-header__inner, .bs-footer__inner, .bs-container {
+    width: min(100% - 1.5rem, var(--content-width));
+  }
+}
+
+@media print {
+  .bs-header, .bs-footer, .bs-skip, .bs-hero__actions { display: none !important; }
+}

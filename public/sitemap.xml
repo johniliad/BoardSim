@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  BoardSim sitemap.
+
+  One URL, because one document is served. The product's routes are hash
+  fragments (#/scenarios, #/glossary, #/methodology, #/about) — a fragment is not
+  sent to the server and is not a separate indexable document, so listing it
+  would be fiction. The content behind each route is reachable from the shell and
+  is described statically in /llms.txt and in the page's structured data.
+
+  Individual runs and share links are deliberately NOT enumerated: no per-record
+  HTML exists, they are participant data, and they are `no-store`.
+
+  __LASTMOD__ is a build stamp. bin/build-deploy.php replaces it with the date the
+  artefact was assembled, so a sitemap cannot claim freshness it does not have
+  (the same approach as ThreatPulse's scripts/stamp-sitemap.mjs).
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://boardsim.iliadis.net/</loc>
+    <lastmod>__LASTMOD__</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>

@@ -1,0 +1,15 @@
+# robots.txt — https://boardsim.iliadis.net/robots.txt
+#
+# Everything public is crawlable. There is no private area, no account and no
+# paywall: the product is a single-page simulator plus a read-only JSON API.
+#
+# What is intentionally not listed in the sitemap: individual runs and share
+# links. They have no server-rendered HTML of their own, they are participant
+# data, and an indexed run would be a leaked one. They answer `Cache-Control:
+# no-store` and carry an unguessable identifier, which is the protection — not
+# this file.
+
+User-agent: *
+Allow: /
+
+Sitemap: https://boardsim.iliadis.net/sitemap.xml

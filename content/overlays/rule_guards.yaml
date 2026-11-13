@@ -1,0 +1,56 @@
+# BoardSim — F-2 Layer 3: rule-level and scenario-level guard bindings
+#
+# 03_DECISION_RULES.md: "DR-027 requires a separate regulatory_status=TRIGGERED
+# guard in a stage mapping; it must never be used for mere suspicion."
+#
+# The pinned scenarios already name a guard symbolically, e.g.
+#   BS-003  S2  DR-027  guard: GDPR_ART33_CONFIRMED_CONTROLLER_PERSONAL_BREACH_RISK
+#   BS-013  S2  DR-027  guard: DORA_MAJOR_CLASSIFIED_AND_REPORTABLE
+# but nothing in the pinned specification defines what those names mean. This overlay
+# supplies the missing semantics without editing a hash-pinned file.
+#
+# Stage note: DR-027 is referenced at Stage 2 in both scenarios. An earlier draft
+# bound these guards at S3, which the fail-closed loader rejects.
+#
+# Substitution: substitution_permitted is false and no substitute rule id is
+# declared. engine/RULE_SCHEMA.md forbids hidden fallback rules, and replacing an
+# authored rule would put a rule in the trace that no author bound to the option.
+
+schema_version: "1.0.0"
+overlay_id: "rule_guards"
+regulatory_overlay_version: "1.1.0"
+
+provenance:
+  source_kind: SIMULATION_ASSUMPTION
+  counsel_reviewed: false
+  psychometrically_calibrated: false
+
+rule_definitions:
+  DR-027:
+    title: "Miss an evidenced notification action"
+    required_guard: ANY_REPORTING_INSTRUMENT_TRIGGERED
+    fail_closed_on_missing_guard: true
+    on_guard_unmet: SUPPRESS_AND_RECORD
+    substitution_permitted: false
+    rationale: "Fires only under an established legal trigger, never on suspicion."
+
+guard_bindings:
+  BS-003:
+    S2:
+      DR-027:
+        - guard_ref: GDPR_ART33_CONFIRMED_CONTROLLER_PERSONAL_BREACH_RISK
+          instrument: REG-GDPR-33
+          expected_status: TRIGGERED
+          counsel_signed_off: false
+          source_kind: SIMULATION_ASSUMPTION
+          note: "S2 inject establishes controller role, identified personal dataset and plausible risk."
+
+  BS-013:
+    S2:
+      DR-027:
+        - guard_ref: DORA_MAJOR_CLASSIFIED_AND_REPORTABLE
+          instrument: REG-DORA-2025-301
+          expected_status: TRIGGERED
+          counsel_signed_off: false
+          source_kind: SIMULATION_ASSUMPTION
+          note: "S2 inject establishes DORA major ICT incident classification at 08:30."

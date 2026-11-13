@@ -1,0 +1,389 @@
+# BoardSim — F-2 Layer 1: global regulatory instrument registry
+#
+# Each REG-xxx anchor from 04_REGULATORY_REGISTER.md is defined ONCE here with
+# its scope and trigger predicate. Legal counsel reviews and signs off on a
+# predicate once, not once per scenario stage.
+#
+# reporting_duty is the field that makes the DR-027 guard sound. Standing
+# governance duties (NIS2 Art. 21, GDPR Art. 32, DORA Art. 5/6/28) are TRIGGERED
+# merely by being in scope, so they must never satisfy a notification guard.
+#
+# Provenance policy: the three governance fields are declared once in the
+# `provenance` block below and materialised onto every entry in the compiled
+# bundle, so the emitted artefact carries a declared value per instrument.
+# Any entry needing a different value must override it explicitly, which the
+# loader enforces by rejecting a silent mismatch against `counsel_signed_off`.
+
+schema_version: "1.0.0"
+overlay_id: "regulatory_instruments"
+regulatory_overlay_version: "1.1.0"
+
+provenance:
+  source_kind: AUTHORITATIVE_SOURCE
+  counsel_reviewed: false
+  psychometrically_calibrated: false
+
+instruments:
+  # --- NIS2 Directive (EU) 2022/2555 ---
+  REG-NIS2-21:
+    title: "NIS2 Directive — Art. 21 (Cybersecurity risk-management measures)"
+    source_url: "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32022L2555"
+    nature: LAW
+    verification_tier: VERIFIED_TOP_LEVEL_LAW
+    reporting_duty: false
+    counsel_signed_off: false
+    scope_expr: "entity_in_scope AND national_transposition_applicable"
+    trigger_expr: "entity_in_scope AND national_transposition_applicable"
+    timers: []
+
+  REG-NIS2-23:
+    title: "NIS2 Directive — Art. 23 (Reporting obligations)"
+    source_url: "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32022L2555"
+    nature: LAW
+    verification_tier: VERIFIED_TOP_LEVEL_LAW
+    reporting_duty: true
+    counsel_signed_off: false
+    scope_expr: "entity_in_scope AND national_transposition_applicable"
+    trigger_expr: "significant_incident_confirmed AND awareness_time_known"
+    timers:
+      - id: NIS2_EARLY_WARNING
+        label: "Early warning to the CSIRT or competent authority"
+        anchor_fact: awareness_time
+        offset_hours: 24
+      - id: NIS2_INCIDENT_NOTIFICATION
+        label: "Incident notification"
+        anchor_fact: awareness_time
+        offset_hours: 72
+      - id: NIS2_FINAL_REPORT
+        label: "Final report, one calendar month after the incident notification"
+        anchor_event: notification_submitted_at
+        calendar: "+1 month"
+        projection_from_timer: NIS2_INCIDENT_NOTIFICATION
+
+  REG-EU-2690:
+    title: "Commission Implementing Regulation (EU) 2024/2690"
+    source_url: "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=OJ:L_202402690"
+    nature: LAW
+    verification_tier: VERIFIED_TOP_LEVEL_LAW
+    reporting_duty: false
+    counsel_signed_off: false
+    scope_expr: "listed_digital_provider_or_trust_service AND entity_in_scope"
+    trigger_expr: "significant_incident_confirmed AND awareness_time_known"
+    timers: []
+
+  # --- GDPR (EU) 2016/679 ---
+  REG-GDPR-32:
+    title: "GDPR — Art. 32 (Security of processing)"
+    source_url: "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32016R0679"
+    nature: LAW
+    verification_tier: VERIFIED_TOP_LEVEL_LAW
+    reporting_duty: false
+    counsel_signed_off: false
+    scope_expr: "personal_data_processing AND role_confirmed"
+    trigger_expr: "personal_data_processing AND role_confirmed"
+    timers: []
+
+  REG-GDPR-33:
+    title: "GDPR — Art. 33 (Notification of a personal data breach to the supervisory authority)"
+    source_url: "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32016R0679"
+    nature: LAW
+    verification_tier: VERIFIED_TOP_LEVEL_LAW
+    reporting_duty: true
+    counsel_signed_off: false
+    scope_expr: "controller AND personal_data_processing"
+    trigger_expr: "personal_data_breach_confirmed AND risk_not_unlikely AND awareness_time_known"
+    timers:
+      - id: GDPR_SA_NOTIFICATION
+        label: "Notification to the supervisory authority without undue delay (72h cap)"
+        anchor_fact: awareness_time
+        offset_hours: 72
+
+  REG-GDPR-34:
+    title: "GDPR — Art. 34 (Communication to the data subject)"
+    source_url: "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32016R0679"
+    nature: LAW
+    verification_tier: VERIFIED_TOP_LEVEL_LAW
+    reporting_duty: true
+    counsel_signed_off: false
+    scope_expr: "controller AND personal_data_processing"
+    trigger_expr: "personal_data_breach_confirmed AND high_risk_to_individuals"
+    timers:
+      - id: GDPR_DATA_SUBJECT_COMM
+        label: "Communication to affected individuals without undue delay"
+        anchor_fact: awareness_time
+        window_type: WITHOUT_UNDUE_DELAY
+
+  REG-GDPR-22:
+    title: "GDPR — Art. 22 (Automated individual decision-making)"
+    source_url: "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32016R0679"
+    nature: LAW
+    verification_tier: VERIFIED_TOP_LEVEL_LAW
+    reporting_duty: false
+    counsel_signed_off: false
+    scope_expr: "personal_data_processing AND solely_automated_decision"
+    trigger_expr: "legal_or_similarly_significant_effect"
+    timers: []
+
+  # --- DORA Regulation (EU) 2022/2554 and delegated instruments ---
+  REG-DORA-5:
+    title: "DORA — Art. 5 (Governance and organisation)"
+    source_url: "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32022R2554"
+    nature: LAW
+    verification_tier: VERIFIED_TOP_LEVEL_LAW
+    reporting_duty: false
+    counsel_signed_off: false
+    scope_expr: "dora_financial_entity"
+    trigger_expr: "dora_financial_entity"
+    timers: []
+
+  REG-DORA-6:
+    title: "DORA — Art. 6 (ICT risk management framework)"
+    source_url: "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32022R2554"
+    nature: LAW
+    verification_tier: VERIFIED_TOP_LEVEL_LAW
+    reporting_duty: false
+    counsel_signed_off: false
+    scope_expr: "dora_financial_entity"
+    trigger_expr: "dora_financial_entity"
+    timers: []
+
+  REG-DORA-19:
+    title: "DORA — Art. 19 (Reporting of major ICT-related incidents)"
+    source_url: "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32022R2554"
+    nature: LAW
+    verification_tier: VERIFIED_TOP_LEVEL_LAW
+    reporting_duty: true
+    counsel_signed_off: false
+    scope_expr: "dora_financial_entity"
+    trigger_expr: "dora_major_ict_incident_classified"
+    timers: []
+
+  REG-DORA-28:
+    title: "DORA — Art. 28 (General principles on ICT third-party risk)"
+    source_url: "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32022R2554"
+    nature: LAW
+    verification_tier: VERIFIED_TOP_LEVEL_LAW
+    reporting_duty: false
+    counsel_signed_off: false
+    scope_expr: "dora_financial_entity AND relevant_ict_third_party"
+    trigger_expr: "dora_financial_entity AND relevant_ict_third_party"
+    timers: []
+
+  REG-DORA-2024-1772:
+    title: "Commission Delegated Regulation (EU) 2024/1772 (Major incident classification)"
+    source_url: "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=OJ:L_202401772"
+    nature: LAW
+    verification_tier: VERIFIED_TOP_LEVEL_LAW
+    reporting_duty: false
+    counsel_signed_off: false
+    scope_expr: "dora_financial_entity"
+    trigger_expr: "classification_data_available"
+    timers: []
+
+  REG-DORA-2024-1773:
+    title: "Commission Delegated Regulation (EU) 2024/1773 (ICT third-party policy)"
+    source_url: "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=OJ:L_202401773"
+    nature: LAW
+    verification_tier: VERIFIED_TOP_LEVEL_LAW
+    reporting_duty: false
+    counsel_signed_off: false
+    scope_expr: "dora_financial_entity AND relevant_arrangement"
+    trigger_expr: "dora_financial_entity AND relevant_arrangement"
+    timers: []
+
+  REG-DORA-2025-301:
+    title: "Commission Delegated Regulation (EU) 2025/301 — Art. 5 (Reporting timelines)"
+    source_url: "https://eur-lex.europa.eu/eli/reg_del/2025/301/oj/eng"
+    nature: LAW
+    verification_tier: VERIFIED_TOP_LEVEL_LAW
+    reporting_duty: true
+    counsel_signed_off: false
+    scope_expr: "dora_financial_entity"
+    trigger_expr: "dora_major_ict_incident_classified AND classification_timestamp_known"
+    timers:
+      - id: DORA_INITIAL_NOTIFICATION
+        label: "Initial notification: 4h from classification, capped at 24h from awareness"
+        clock_rule: DORA_ART5_INITIAL
+        anchor_fact: classification_time
+        secondary_cap_fact: awareness_time
+        offset_hours: 4
+        secondary_cap_hours: 24
+      - id: DORA_INTERMEDIATE_REPORT
+        label: "Intermediate report, 72h after the initial notification"
+        anchor_event: initial_notification_submitted_at
+        offset_hours: 72
+        projection_from_timer: DORA_INITIAL_NOTIFICATION
+      - id: DORA_FINAL_REPORT
+        label: "Final report, one calendar month after the latest intermediate report"
+        anchor_event: latest_intermediate_submitted_at
+        calendar: "+1 month"
+        projection_from_timer: DORA_INTERMEDIATE_REPORT
+
+  # --- Cyber Resilience Act (EU) 2024/2847 ---
+  REG-CRA-14:
+    title: "Cyber Resilience Act — Art. 14 (Reporting obligations of manufacturers)"
+    source_url: "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=OJ:L_202402847"
+    nature: LAW
+    verification_tier: VERIFIED_TOP_LEVEL_LAW
+    reporting_duty: true
+    counsel_signed_off: false
+    effective_from_date: "2026-09-11"
+    scope_expr: "manufacturer_scoped_product AND date_at_least_2026_09_11"
+    trigger_expr: "reportable_event AND awareness_time_known"
+    timers:
+      - id: CRA_EARLY_WARNING
+        label: "Early warning notification (24h from awareness)"
+        anchor_fact: awareness_time
+        offset_hours: 24
+      - id: CRA_VULN_INCIDENT_NOTIFICATION
+        label: "Vulnerability or severe incident notification (72h from awareness)"
+        anchor_fact: awareness_time
+        offset_hours: 72
+
+  # --- AI Act: gated because the supplied text is the 2026 consolidation ---
+  REG-AIA-14:
+    title: "EU AI Act — Art. 14 (Human oversight)"
+    source_url: "https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=CELEX:02024R1689-20260727"
+    nature: LAW
+    verification_tier: REQUIRES_COUNSEL_GATE
+    reporting_duty: false
+    counsel_signed_off: false
+    scope_expr: "high_risk_ai_in_scope AND applicable_effective_date"
+    trigger_expr: "high_risk_ai_in_scope AND applicable_effective_date"
+    timers: []
+
+  REG-AIA-26:
+    title: "EU AI Act — Art. 26 (Obligations of deployers of high-risk AI systems)"
+    source_url: "https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=CELEX:02024R1689-20260727"
+    nature: LAW
+    verification_tier: REQUIRES_COUNSEL_GATE
+    reporting_duty: false
+    counsel_signed_off: false
+    scope_expr: "deployer_of_high_risk_ai AND applicable_effective_date"
+    trigger_expr: "deployer_of_high_risk_ai AND applicable_effective_date"
+    timers: []
+
+  REG-AIA-73:
+    title: "EU AI Act — Art. 73 (Reporting of serious incidents)"
+    source_url: "https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=CELEX:02024R1689-20260727"
+    nature: LAW
+    verification_tier: REQUIRES_COUNSEL_GATE
+    reporting_duty: true
+    counsel_signed_off: false
+    scope_expr: "provider_high_risk_ai AND applicable_effective_date"
+    trigger_expr: "serious_incident_confirmed AND awareness_time_known"
+    timers: []
+
+  # --- Greek national transposition: unverified, therefore counsel-gated ---
+  REG-GREECE-5160:
+    title: "Greek Law 5160/2024 (NIS2 national transposition and ministerial acts)"
+    source_url: "https://cyber.gov.gr/wp-content/uploads/2024/12/ENOTHTA_5_%CE%9D%CE%9F%CE%9C%CE%9F%CE%98%CE%95%CE%A3%CE%99%CE%91_fek_a_195_2024-5160-2024-1.pdf"
+    nature: NATIONAL_LAW
+    verification_tier: REQUIRES_COUNSEL_GATE
+    reporting_duty: false
+    counsel_signed_off: false
+    scope_expr: "greek_entity_and_scoped"
+    trigger_expr: "significant_incident_confirmed AND awareness_time_known"
+    timers: []
+    related_urls:
+      - "https://cyber.gov.gr/wp-content/uploads/2025/03/250323_%CE%9F%CE%B4%CE%B7%CE%B3%CF%8C%CF%82-%CE%91%CE%BD%CE%B1%CF%86%CE%BF%CF%81%CE%AC%CF%82-%CE%9D.-5160_2024-1.pdf"
+      - "https://cyber.gov.gr/wp-content/uploads/2026/09/%CE%94%CE%B9%CE%B1%CF%87%CE%B5%CE%AF%CF%81%CE%B9%CF%83%CE%B7-%CE%B5%CF%85%CF%80%CE%B1%CE%B8%CE%B5%CE%B9%CF%8E%CE%BD-%CE%B1%CF%80%CF%8C-%CF%84%CE%B9%CF%82-%CE%B2%CE%B1%CF%83%CE%B9%CE%BA%CE%AD%CF%82-%CE%BF%CE%BD%CF%84%CF%8C%CF%84%CE%B7%CF%84%CE%B5%CF%82-%CF%84%CE%BF%CF%85-%CE%BD.-5160-2024.pdf"
+      - "https://cyber.gov.gr/wp-content/uploads/2025/08/%CE%91%CE%A0%CE%9F%CE%A6%CE%91%CE%A3%CE%97_%CE%A5%CE%A0%CE%9F%CE%A5%CE%A1%CE%93%CE%9F%CE%A5_1899_20250204250.pdf"
+      - "https://cyber.gov.gr/wp-content/uploads/2025/08/%CE%92-4241.pdf"
+      - "https://cyber.gov.gr/wp-content/uploads/2025/05/20250202186.pdf"
+
+  # --- Non-binding frameworks and guidance: displayed, never adjudicated ---
+  REG-NIST-CSF-GV:
+    title: "NIST CSF 2.0 — GOVERN"
+    source_url: "https://nvlpubs.nist.gov/nistpubs/CSWP/NIST.CSWP.29.pdf"
+    nature: FRAMEWORK
+    verification_tier: GUIDANCE
+    reporting_duty: false
+    counsel_signed_off: false
+    timers: []
+
+  REG-NIST-CSF-ID:
+    title: "NIST CSF 2.0 — IDENTIFY"
+    source_url: "https://nvlpubs.nist.gov/nistpubs/CSWP/NIST.CSWP.29.pdf"
+    nature: FRAMEWORK
+    verification_tier: GUIDANCE
+    reporting_duty: false
+    counsel_signed_off: false
+    timers: []
+
+  REG-NIST-CSF-PR:
+    title: "NIST CSF 2.0 — PROTECT"
+    source_url: "https://nvlpubs.nist.gov/nistpubs/CSWP/NIST.CSWP.29.pdf"
+    nature: FRAMEWORK
+    verification_tier: GUIDANCE
+    reporting_duty: false
+    counsel_signed_off: false
+    timers: []
+
+  REG-NIST-CSF-DE:
+    title: "NIST CSF 2.0 — DETECT"
+    source_url: "https://nvlpubs.nist.gov/nistpubs/CSWP/NIST.CSWP.29.pdf"
+    nature: FRAMEWORK
+    verification_tier: GUIDANCE
+    reporting_duty: false
+    counsel_signed_off: false
+    timers: []
+
+  REG-NIST-CSF-RS:
+    title: "NIST CSF 2.0 — RESPOND"
+    source_url: "https://nvlpubs.nist.gov/nistpubs/CSWP/NIST.CSWP.29.pdf"
+    nature: FRAMEWORK
+    verification_tier: GUIDANCE
+    reporting_duty: false
+    counsel_signed_off: false
+    timers: []
+
+  REG-NIST-CSF-RC:
+    title: "NIST CSF 2.0 — RECOVER"
+    source_url: "https://nvlpubs.nist.gov/nistpubs/CSWP/NIST.CSWP.29.pdf"
+    nature: FRAMEWORK
+    verification_tier: GUIDANCE
+    reporting_duty: false
+    counsel_signed_off: false
+    timers: []
+
+  REG-NIST-800-61R3:
+    title: "NIST SP 800-61 Rev. 3 — Incident Response Recommendations"
+    source_url: "https://nvlpubs.nist.gov/nistpubs/specialpublications/nist.sp.800-61r3.pdf"
+    nature: GUIDANCE
+    verification_tier: GUIDANCE
+    reporting_duty: false
+    counsel_signed_off: false
+    timers: []
+
+  REG-ENISA-MAP:
+    title: "ENISA Technical Implementation Guidance Mapping Table v1.2"
+    source_url: "https://www.enisa.europa.eu/sites/default/files/2025-09/ENISA_Technical_Implementation_Guidance_Mapping_table_version_1.2.xlsx"
+    nature: GUIDANCE
+    verification_tier: GUIDANCE
+    reporting_duty: false
+    counsel_signed_off: false
+    timers: []
+
+  REG-ENISA-CRISIS:
+    title: "ENISA Study — Best Practices Cyber Crisis Management"
+    source_url: "https://www.enisa.europa.eu/sites/default/files/2024-11/ENISA%20Study%20Best%20Practices%20Cyber%20Crisis%20Management.pdf"
+    nature: GUIDANCE
+    verification_tier: GUIDANCE
+    reporting_duty: false
+    counsel_signed_off: false
+    timers: []
+
+# Background material that must never become an executable predicate.
+# A Commission Recommendation is non-binding by its own nature, and FERMA is
+# secondary professional commentary, so none of these appear under instruments.
+reference_context_only:
+  - id: REF-OJ-C-2025-3445
+    url: "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=OJ:C_202503445"
+    status: UNVERIFIED_REFERENCE_ONLY
+  - id: REF-REC-2017-1584
+    url: "https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=CELEX:32017H1584"
+    status: UNVERIFIED_REFERENCE_ONLY
+  - id: REF-FERMA-2024
+    url: "https://ferma.eu/wp-content/uploads/2024/10/CYBER-REPORTING-STACK-NAVIGATING-THE-EU-REQUIREMENTS-web-1.pdf"
+    status: NONBINDING_SECONDARY_COMMENTARY

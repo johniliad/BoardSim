@@ -1,0 +1,149 @@
+# BoardSim — board-pack checklist rubric
+#
+# 02_SCORING_MODEL.md: the seven board fields are graded with DR-041..DR-047 "when
+# populated and checked against a fixed, machine-testable checklist". The spec
+# names the mechanism but does not define what "substantiated" means, so this
+# overlay supplies that definition as authored content rather than leaving the
+# engine to infer it.
+#
+# Each field is a single choice among authored structured options. Exactly one
+# option is authored as substantiated; choosing it fires the field's rule. Free
+# text is never consulted, so prose can neither earn nor lose a point.
+#
+# Field keys must equal every pinned scenario's `board.checklists` list, which the
+# loader cross-validates.
+
+schema_version: "1.0.0"
+overlay_id: "board_checklist"
+
+provenance:
+  source_kind: SIMULATION_ASSUMPTION
+  counsel_reviewed: false
+  psychometrically_calibrated: false
+
+fields:
+  situation:
+    rule: DR-041
+    label: Situation
+    prompt: Summarise what is established, with timestamps, and mark the remainder as unknown.
+    options:
+      - id: SIT-ESTABLISHED
+        label: State the established facts with their timestamps and mark everything else as unknown
+        substantiated: true
+        reason: Separates confirmed facts from inference, so the board can see the evidence boundary.
+      - id: SIT-BLENDED
+        label: Summarise all available information as though it were confirmed
+        substantiated: false
+        reason: Blends inference with fact and removes the board's ability to judge confidence.
+      - id: SIT-OMITTED
+        label: Omit the situation and begin with the recommendation
+        substantiated: false
+        reason: The board cannot evaluate a recommendation without the facts behind it.
+
+  impact:
+    rule: DR-042
+    label: Business impact
+    prompt: Quantify the business impact from the authored ledger and state the confidence.
+    options:
+      - id: IMP-QUANTIFIED
+        label: Quantify the impact from the known ledger figures and state the confidence level
+        substantiated: true
+        reason: Gives the board a defensible number with its uncertainty attached.
+      - id: IMP-QUALITATIVE
+        label: Describe the impact qualitatively without figures
+        substantiated: false
+        reason: Leaves the board unable to weigh cost against benefit.
+      - id: IMP-MINIMISED
+        label: State that the impact is negligible
+        substantiated: false
+        reason: An unsupported minimisation transfers undisclosed exposure to the board.
+
+  uncertainty:
+    rule: DR-043
+    label: Uncertainty and risk
+    prompt: Name the unresolved questions, the confidence level and the next evidence checkpoint.
+    options:
+      - id: UNC-NAMED
+        label: Name the unresolved questions, the confidence level and the next evidence checkpoint
+        substantiated: true
+        reason: Converts uncertainty into something the board can monitor and decide against.
+      - id: UNC-ABSENT
+        label: State that no material uncertainty remains
+        substantiated: false
+        reason: An unsupported claim of certainty is the failure mode this field exists to catch.
+      - id: UNC-BESTCASE
+        label: Present the best case only
+        substantiated: false
+        reason: A single scenario removes the board's ability to consider alternatives.
+
+  action:
+    rule: DR-044
+    label: Decision and alternative
+    prompt: State the recommended option and the specific alternative that was rejected.
+    options:
+      - id: ACT-WITH-ALTERNATIVE
+        label: State the recommended decision and the specific alternative that was rejected
+        substantiated: true
+        reason: Makes the trade-off explicit and auditable at decision time.
+      - id: ACT-NO-ALTERNATIVE
+        label: State the recommendation without the alternative that was considered
+        substantiated: false
+        reason: Hides the trade-off, so the choice cannot be reviewed later.
+      - id: ACT-OPTIONS-ONLY
+        label: Present several options without a recommendation
+        substantiated: false
+        reason: A decision was required; returning the question does not discharge it.
+
+  funding:
+    rule: DR-045
+    label: Investment and cost
+    prompt: State the authorised figure, what it buys and its basis.
+    options:
+      - id: FUN-BOUNDED
+        label: State the authorised figure, what it buys and its basis
+        substantiated: true
+        reason: Connects spend to capability and gives the board a controllable number.
+      - id: FUN-WITHHELD
+        label: Decline to give a figure on the grounds that it is commercially sensitive
+        substantiated: false
+        reason: The board cannot authorise spend it is not shown.
+      - id: FUN-UNBOUNDED
+        label: Request whatever budget proves necessary
+        substantiated: false
+        reason: An unbounded request transfers financial control away from the board.
+
+  residual_risk:
+    rule: DR-046
+    label: Residual risk and owner
+    prompt: Name the residual risk reported by the engine, the accountable owner and the reassessment point.
+    options:
+      - id: RES-OWNED
+        label: Name the residual risk, the accountable owner and the reassessment point
+        substantiated: true
+        reason: Residual exposure is accepted knowingly by a named person, which is the governance standard.
+      - id: RES-NONE
+        label: State that no residual risk remains
+        substantiated: false
+        reason: No real decision eliminates residual risk, and the claim prevents oversight.
+      - id: RES-UNOWNED
+        label: Describe the residual risk without naming an owner
+        substantiated: false
+        reason: Unattributed exposure cannot be accepted or followed up.
+
+  ask:
+    rule: DR-047
+    label: Board resolution requested
+    prompt: Request one unambiguous board decision.
+    options:
+      - id: ASK-RESOLUTION
+        label: Request one unambiguous resolution to approve, accept or direct a specific action
+        substantiated: true
+        reason: A single explicit ask lets the board decide, and the decision can be recorded.
+      - id: ASK-NOTED
+        label: Ask the board to note the update
+        substantiated: false
+        reason: Noting is not a decision and leaves the recommendation unresolved.
+      - id: ASK-SUPPORT
+        label: Ask for support in principle
+        substantiated: false
+        reason: In-principle support commits no authority, funding or accountability.

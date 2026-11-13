@@ -1,0 +1,44 @@
+# Line endings matter here: the specification is SHA-256 pinned, so any checkout
+# that rewrites bytes would fail verification. Every text file is therefore
+# normalised to LF in both the repository and the working tree, and the pinned
+# paths are stated explicitly so the rule cannot be lost in a merge.
+* text=auto eol=lf
+
+requirements/** text eol=lf
+scenarios/** text eol=lf
+engine/** text eol=lf
+content/bundles/** text eol=lf
+src/** text eol=lf
+bin/** text eol=lf
+tools/** text eol=lf
+
+*.sha256 text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.php text eol=lf
+*.md text eol=lf
+
+# Windows entry points keep CRLF so cmd.exe parses them correctly.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary assets are never diffed or converted.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.xlsx binary
+*.woff binary
+*.woff2 binary
+
+# Collapse the compiled bundle in GitHub diffs: it is a generated single-line
+# artefact, and reviewers should read its .sha256 instead.
+content/bundles/** linguist-generated=true
+
+# Keep the specification visible in language statistics rather than as prose.
+requirements/** linguist-documentation
+scenarios/** linguist-documentation
+engine/** linguist-documentation

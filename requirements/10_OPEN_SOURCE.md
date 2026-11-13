@@ -1,0 +1,1 @@
+Be extra careful with .gitignore because this project will be hosted as an open source project on github

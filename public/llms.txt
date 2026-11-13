@@ -1,0 +1,80 @@
+# BoardSim
+
+> BoardSim is a board-level executive cybersecurity decision simulator. A visitor
+> takes the role of an executive facing a four-stage incident: they choose one of
+> three options at each stage, substantiate a board pack, and receive a score
+> computed on the server from a published rule set, with a rule-by-rule trace, a
+> replay of the recorded decisions and a separate regulatory assessment.
+
+Canonical: https://boardsim.iliadis.net/
+Author: Dr. John Iliadis — https://www.iliadis.net/
+Language: English (en)
+Licence of the interface: free to use, no account, no cost.
+
+## What the product is
+
+- A decision exercise, not a course, a certification or a scanner.
+- Four stages, three authored options per stage, ten weighted dimensions of
+  judgement (strategic, risk, regulatory, and seven more).
+- A deterministic integer score from 0 to 100. The same decisions always produce
+  the same score: no randomness, no language model, no inference.
+- Every score is reproducible from the pinned SHA-256 hashes of the scoring
+  policy, the regulatory bundle and the scenario content that the run recorded.
+
+## How the score is computed
+
+Each dimension starts at 70; the rules that fire add or subtract authored deltas;
+the risk-appetite setting adds published modifiers to four rules only; each
+dimension is clipped to 0–100; the weighted sum is divided by 100 and floored.
+The formula, the current weights, the appetite modifiers and the score bands are
+rendered live at https://boardsim.iliadis.net/#/methodology from the same policy
+the engine uses.
+
+## What it is not
+
+- Not a psychometric instrument: the weights and deltas are authored judgement and
+  have not been calibrated or validated.
+- Not legal advice: the regulatory panel is a separate applicability assessment
+  derived from authored facts, and instruments that require counsel say so.
+- Not a compliance certification. A score reflects agreement with the published
+  BoardSim policy for that scenario, nothing wider.
+
+## Machine-readable endpoints
+
+All are same-origin JSON, GET unless stated, and are the canonical way to read
+this product's content without executing JavaScript.
+
+- https://boardsim.iliadis.net/v1/health — release, pins, schema and store status.
+- https://boardsim.iliadis.net/v1/methodology — the health payload plus the
+  methodology note.
+- https://boardsim.iliadis.net/v1/scenarios — the fourteen scenarios: title,
+  sector, difficulty, stage and option structure.
+- https://boardsim.iliadis.net/v1/glossary — 10 dimensions with weights, 47
+  decision rules with rationale and NIST CSF 2.0 function, 28 regulatory
+  instruments with official sources, and the appetite/band/difficulty settings.
+- https://boardsim.iliadis.net/v1/demo — the demo run (no stored state).
+  POST /v1/demo/decide chooses a stage option in the demo.
+- POST https://boardsim.iliadis.net/v1/runs — create a run; then
+  POST /v1/runs/{id}/decisions, POST /v1/runs/{id}/board and POST
+  /v1/runs/{id}/score.
+- GET https://boardsim.iliadis.net/v1/runs/{id}/explain — the full explanation:
+  score, dimensions, contributions, rule trace, authored consequences per
+  decision, regulatory panel, governance flags and the verification chain.
+- POST https://boardsim.iliadis.net/v1/shares — mint a read-only result link;
+  GET /v1/shares/{token} reads it, DELETE revokes it.
+
+Writes are rate limited per client (10 run creations, 30 decisions, 10 shares and
+120 reads per minute); a refused write answers 429 with `Retry-After`.
+
+## Pages
+
+- https://boardsim.iliadis.net/ — the simulator.
+- https://boardsim.iliadis.net/#/scenarios — the fourteen scenarios.
+- https://boardsim.iliadis.net/#/glossary — every term, rule and instrument.
+- https://boardsim.iliadis.net/#/methodology — the formula and the pinned policy.
+- https://boardsim.iliadis.net/#/about — provenance, limitations, author.
+
+## Citation
+
+BoardSim (2026). BoardSim — Executive decision-making under pressure.
+https://boardsim.iliadis.net/ — Dr. John Iliadis, https://www.iliadis.net/
