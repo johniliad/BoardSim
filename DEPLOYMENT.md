@@ -72,6 +72,32 @@ replacing the previous SPA build. Nothing is hand-edited: the pointer is
 generated, and the same build produces the `backend/` tree that goes beside
 `public_html` (see [`docs/deploy-cpanel.md`](docs/deploy-cpanel.md)).
 
+The build reads its own archives back and refuses to finish if `docroot.zip`
+does not actually contain `.htaccess`, `robots.txt`, `sitemap.xml`, `llms.txt`,
+`app/index.html` and `api/index.php`, and it writes a second copy of each archive
+named after the release (`docroot-<version>.zip`). Both exist because the failure they
+prevent is silent: an archive without the discovery files uploads cleanly, the SPA
+fallback then answers `/robots.txt` with HTML, and a crawler reports the homepage
+as **403** while a browser renders it perfectly. Upload the **versioned** archive —
+a folder of `docroot.zip` copies from earlier releases cannot be told apart.
+
+`/` is a directory, so `public/.htaccess` maps the empty path to the shell
+*before* its real-file test; without that rule Apache stops at `-d`, finds no
+`DirectoryIndex`, and answers 403 on every crawler's first request. A missing
+discovery file is a 404 rather than the SPA shell, so an incomplete upload
+announces itself instead of impersonating a policy file.
+
+After the upload, verify the **origin**, not the artefact:
+
+```bash
+php bin/verify-deploy.php --base=https://boardsim.iliadis.net --require-ready
+```
+
+`deploy/smoke-router.php` proves the files; only that command proves the server.
+It fails on a 403 at `/`, on any discovery file answered by the SPA fallback, and
+on a served shell that is not byte-for-byte the one this checkout built — the
+asset hash cannot distinguish two releases when only PHP and HTML changed.
+
 The same three items, by hand:
 
 1. `public/app/` — the built SPA (create `app/` at the document root and copy the

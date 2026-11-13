@@ -113,6 +113,21 @@ function warn(string $label, string $detail): void
 }
 
 /**
+ * True when a response is the SPA shell rather than the static file that was asked
+ * for. The SPA fallback answers *any* path with index.html and HTTP 200, so a
+ * missing robots.txt looks like a successful request until you read the bytes —
+ * which is how a deploy without the discovery files passed every check that only
+ * asked for a status code.
+ *
+ * @param array{status: int, headers: array<string, string>, body: string, error: string|null} $response
+ */
+function answeredBySpaFallback(array $response): bool
+{
+    return str_contains($response['headers']['content-type'] ?? '', 'text/html')
+        || str_contains($response['body'], '<!doctype html');
+}
+
+/**
  * Minimal GET client. Three transports, because the machine that runs the check
  * is not always the machine that serves it:
  *
@@ -549,7 +564,8 @@ expect(
 $localIndex = $root . '/public/app/index.html';
 
 if (is_file($localIndex)) {
-    preg_match('#/app/assets/index-[A-Za-z0-9_-]+\.js#', (string) file_get_contents($localIndex), $localAsset);
+    $localShell = (string) file_get_contents($localIndex);
+    preg_match('#/app/assets/index-[A-Za-z0-9_-]+\.js#', $localShell, $localAsset);
     $expected = $localAsset[0] ?? '';
 
     if ($expected !== '' && $deployed !== '' && $expected !== $deployed) {
@@ -569,6 +585,24 @@ if (is_file($localIndex)) {
                 : 'the origin served no shell, so no bundle could be compared'
         );
     }
+
+    // The bundle hash is not a release marker: a release that changes only PHP,
+    // HTML or .htaccess leaves the JS asset name identical, so a docroot two
+    // releases old compares equal on hashes and looks deployed. The shell's own
+    // bytes are the only thing that changes every time, so compare those.
+    expect(
+        'the served shell is byte-for-byte the one in this checkout',
+        $index['status'] === 200
+            && $localShell !== ''
+            && hash_equals(hash('sha256', $localShell), hash('sha256', $index['body'])),
+        [],
+        sprintf(
+            'origin served %d bytes of shell, this checkout built %d — the docroot '
+            . 'is a different release even if the asset hash matches',
+            strlen($index['body']),
+            strlen($localShell)
+        )
+    );
 }
 
 printf("\n== Discovery ==\n");
@@ -601,14 +635,16 @@ $robots = httpGet($base . '/robots.txt');
 expect(
     'robots.txt is served as text and names the sitemap',
     $robots['status'] === 200
-        && str_contains($robots['headers']['content-type'] ?? '', 'text')
+        && !answeredBySpaFallback($robots)
+        && str_contains($robots['headers']['content-type'] ?? '', 'text/plain')
         && $canonical !== ''
         && str_contains($robots['body'], 'Sitemap: ' . $canonical . 'sitemap.xml'),
     $robots,
     sprintf(
-        'HTTP %d, %s — upload robots.txt to the document root',
+        'HTTP %d, %s, %d bytes — upload robots.txt to the document root',
         $robots['status'],
-        $robots['headers']['content-type'] ?? 'no content type'
+        $robots['headers']['content-type'] ?? 'no content type',
+        strlen($robots['body'])
     )
 );
 
@@ -617,15 +653,18 @@ $sitemap = httpGet($base . '/sitemap.xml');
 expect(
     'sitemap.xml is served and its lastmod was stamped at build time',
     $sitemap['status'] === 200
+        && !answeredBySpaFallback($sitemap)
+        && str_contains($sitemap['headers']['content-type'] ?? '', 'xml')
         && str_contains($sitemap['body'], '<urlset')
         && str_contains($sitemap['body'], '<loc>' . $canonical . '</loc>')
         && !str_contains($sitemap['body'], '__LASTMOD__'),
     $sitemap,
     sprintf(
-        'HTTP %d, %s — a __LASTMOD__ placeholder means the file was taken from '
-        . 'public/ instead of the built docroot',
+        'HTTP %d, %s, %d bytes — a __LASTMOD__ placeholder means the file was taken '
+        . 'from public/ instead of the built docroot; text/html means it is not on disk',
         $sitemap['status'],
-        $sitemap['headers']['content-type'] ?? 'no content type'
+        $sitemap['headers']['content-type'] ?? 'no content type',
+        strlen($sitemap['body'])
     )
 );
 
@@ -634,14 +673,27 @@ $llms = httpGet($base . '/llms.txt');
 expect(
     'llms.txt is served as text and points at the API',
     $llms['status'] === 200
+        && !answeredBySpaFallback($llms)
+        && str_contains($llms['headers']['content-type'] ?? '', 'text/plain')
         && str_starts_with($llms['body'], '# BoardSim')
         && str_contains($llms['body'], '/v1/glossary'),
     $llms,
     sprintf(
-        'HTTP %d, %s — upload llms.txt to the document root',
+        'HTTP %d, %s, %d bytes — upload llms.txt to the document root',
         $llms['status'],
-        $llms['headers']['content-type'] ?? 'no content type'
+        $llms['headers']['content-type'] ?? 'no content type',
+        strlen($llms['body'])
     )
+);
+
+// The three files above share one failure mode, so state it once: the SPA
+// fallback answering a static path is a deploy that never copied the files.
+expect(
+    'no discovery file is answered by the SPA fallback',
+    !answeredBySpaFallback($robots) && !answeredBySpaFallback($sitemap) && !answeredBySpaFallback($llms),
+    [],
+    'robots.txt, sitemap.xml and llms.txt must exist at the origin root; the SPA '
+        . 'fallback answering them with index.html is why a crawler reports 403'
 );
 
 $duplicate = httpGet($base . '/app/index.html');

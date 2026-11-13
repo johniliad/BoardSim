@@ -92,29 +92,43 @@ content bundle fails verification.
 4. **Credentials**: copy `config.local.php.example` to `config.local.php` and fill
    in the password. This is the only file you type on the host, and it is outside
    the document root.
-5. **Document root**: upload `docroot.zip` and extract it into the subdomain's
-   document root. It must end up holding `.htaccess`, `app/`, `api/`, `robots.txt`,
-`sitemap.xml` and `llms.txt` — the last three at the root, not inside `app/`, or no
-crawler will find them.
+5. **Document root**: upload `docroot-<version>.zip` (the build also leaves an
+   unversioned `docroot.zip`; prefer the named one) and extract it into the
+   subdomain's document root. It must end up holding `.htaccess`, `app/`, `api/`,
+   `robots.txt`, `sitemap.xml` and `llms.txt` — the last three at the root, not
+   inside `app/`, or no crawler will find them. The build has already read the
+   archive back and failed if any of the six is absent.
 6. **Schema**: either paste `install.sql` into phpMyAdmin (instant), or let the
    migrate cron job do it within one tick.
 7. **Cron**: paste the three lines from `cron.txt` into cPanel → Cron Jobs. Use
    the PHP binary for the **same version the domain runs**; a cron defaulting to a
    different major version parses the code with a different interpreter.
-8. **Verify**: open `https://boardsim.example.net/v1/health`, then run the line in
-   `verify.txt` from the workstation.
+8. **Verify the origin**, not just the artefact: open
+   `https://boardsim.example.net/v1/health`, then run the line in `verify.txt` from
+   the workstation (`php bin/verify-deploy.php --base=… --require-ready`). A 403 on
+   `/`, or a `text/html` answer for `robots.txt`, means the docroot is not the
+   release you think it is.
 
-Before uploading, prove the artefact locally:
+Before uploading, prove the artefact locally. The upload artefact points at the
+host's backend, so build a second one whose pointer aims at this checkout —
+otherwise `/v1` answers 500 locally and the run proves nothing about the host:
 
 ```bash
-php -S 127.0.0.1:8200 -t build/deploy/<version>/docroot deploy/smoke-router.php
+php bin/build-deploy.php --version=smoke --out=build/smoke --backend="$(pwd)"
+php -S 127.0.0.1:8200 -t build/smoke/boardsim-smoke/docroot deploy/smoke-router.php
 php bin/verify-deploy.php --base=http://127.0.0.1:8200 --require-ready
 ```
 
 Set `BOARDSIM_DEV=1` for the server process if the workstation has no MySQL; the
-check accepts `mode=dev` on a loopback origin. This runs 19 assertions against the
-built trees — routing, SPA shell and asset hash, CSP, dotfile denial — so a
+check accepts `mode=dev` on a loopback origin. This runs 27 assertions against the
+built trees — routing, the SPA shell byte-for-byte, CSP, dotfile denial, and the
+three discovery files served as text/XML rather than as the SPA fallback — so a
 packaging mistake is caught before it becomes a cPanel upload.
+
+The artefact check is necessary and not sufficient. PHP's built-in server has no
+directory-index step, so it cannot reproduce the one Apache rule that mattered:
+`/` answered 403 to every crawler while the smoke test stayed green. Run the same
+command against the real origin after every upload.
 
 ## 4. `/v1/health` is the installer
 

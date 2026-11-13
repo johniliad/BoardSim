@@ -28,6 +28,21 @@
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteRule ^api/index\.php$ - [R=503,L]
 
+  # The document root itself is a directory, so the "-d" branch below would stop
+  # this ruleset and leave Apache looking for a DirectoryIndex that the build never
+  # creates: the shell lives at app/index.html. With Options -Indexes, "no index and
+  # no listing" is a 403, which is exactly what every crawler received on "/" while
+  # the page looked fine in a browser (the host renders 403 with the app shell).
+  # The empty path can only match here, before the real-file test.
+  RewriteRule ^$ app/index.html [L]
+
+  # A discovery file that is not on disk must not be answered by the SPA fallback.
+  # /robots.txt returning index.html with HTTP 200 tells a crawler the site has no
+  # policy, and looks like success in a browser; 404 is the truth, and it is what a
+  # deploy that forgot the files should produce.
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteRule ^(robots\.txt|sitemap\.xml|llms\.txt)$ - [R=404,L]
+
   # Real files (hashed assets, favicon) are served directly.
   RewriteCond %{REQUEST_FILENAME} -f [OR]
   RewriteCond %{REQUEST_FILENAME} -d
