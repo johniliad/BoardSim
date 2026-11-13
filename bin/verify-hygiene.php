@@ -158,6 +158,9 @@ if ($gitStatus !== 0) {
         'public/sitemap.xml',
         'public/llms.txt',
         'web/index.html',
+        'web/public/boardsim-logo.svg',
+        'web/public/boardsim-mark.svg',
+        'web/public/favicon.svg',
         '.github/workflows/ci.yml',
     ];
 
@@ -176,7 +179,9 @@ if ($gitStatus !== 0) {
 
 printf(
     "hygiene: %s (%d file(s) scanned)\n",
-    $failures === 0 ? 'PASS — no host paths in the repository' : "{$failures} host path(s) to remove",
+    $failures === 0
+        ? 'PASS — nothing unpublishable tracked, nothing a clone needs missing'
+        : "{$failures} problem(s) to fix, listed above",
     $scanned
 );
 

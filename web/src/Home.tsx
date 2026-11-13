@@ -7,7 +7,16 @@ export default function Home({ health }: { health: Health | null }) {
       <section className="bs-hero">
         <div className="bs-hero__inner">
           <div>
-            <p className="bs-eyebrow">BoardSim</p>
+            {/* The full lockup, as on the brand sheet. The <h1> below is the
+                page's statement, so this image is the identity, not a heading:
+                alt text names the product and nothing is duplicated as text. */}
+            <img
+              className="bs-brand-lockup"
+              src="/app/boardsim-logo.svg"
+              alt="BoardSim"
+              width={320}
+              height={88}
+            />
             <h1>Executive Decision-Making Under Pressure</h1>
             <p className="bs-hero__copy">
               Make the decision. Defend the decision. See the consequences. Fourteen staged

@@ -83,9 +83,18 @@ export default function App() {
       <header className="bs-header">
         <div className="bs-header__inner">
           <a className="bs-brand" href="#/">
-            <span className="bs-brand__mark" aria-hidden="true">
-              BS
-            </span>
+            {/* The mark is the logo from the brand sheet: a navy-to-blue knight,
+                the one piece on the board that moves in a way nobody expects. It
+                is decorative here because the wordmark beside it is real text,
+                which a screen reader reads once and a crawler can index. */}
+            <img
+              className="bs-brand__mark"
+              src="/app/boardsim-mark.svg"
+              alt=""
+              width={42}
+              height={42}
+              aria-hidden="true"
+            />
             <span className="bs-brand__name">
               BoardSim
               <span className="bs-brand__tagline">Executive decision-making under pressure</span>

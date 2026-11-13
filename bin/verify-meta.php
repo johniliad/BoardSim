@@ -138,6 +138,11 @@ function checkShell(string $label, string $html, string $canonical, string $ogTi
         $label . ' JSON-LD describes features a reader can verify',
         is_array($data['featureList'] ?? null) && count($data['featureList']) >= 3
     );
+    check(
+        $label . ' JSON-LD points at the logo that is actually served',
+        ($data['logo'] ?? null) === $canonical . 'app/boardsim-mark.svg'
+            && ($data['image'] ?? null) === $canonical . 'app/boardsim-logo.svg'
+    );
 }
 
 section('The served shell (source)');
@@ -213,6 +218,68 @@ foreach ($endpoints as $endpoint) {
 
 check('llms.txt states what the product is not', str_contains($llms, '## What it is not'));
 check('llms.txt names the author', str_contains($llms, 'Dr. John Iliadis'));
+
+section('The logo');
+
+$markFile = $root . '/web/public/boardsim-mark.svg';
+$lockupFile = $root . '/web/public/boardsim-logo.svg';
+$faviconFile = $root . '/web/public/favicon.svg';
+$knightHead = 'M 22,10 C 32.5,11 38.5,18 38,39';
+
+foreach ([$markFile, $lockupFile, $faviconFile] as $asset) {
+    $svg = is_file($asset) ? (string) file_get_contents($asset) : '';
+
+    check(
+        basename($asset) . ' exists and parses as SVG',
+        $svg !== ''
+            && str_contains($svg, 'viewBox=')
+            && @simplexml_load_string($svg) !== false
+    );
+}
+
+$markSvg = (string) file_get_contents($markFile);
+
+check(
+    'the mark is the knight, drawn in the brand gradient',
+    str_contains($markSvg, $knightHead)
+        && str_contains($markSvg, '#0b2540')
+        && str_contains($markSvg, '#2f92e8')
+);
+
+$lockupSvg = (string) file_get_contents($lockupFile);
+
+check(
+    'the lockup sets the wordmark in navy and blue',
+    str_contains($lockupSvg, '<tspan fill="#10263f">Board</tspan>')
+        && str_contains($lockupSvg, '<tspan fill="#1b76d2">Sim</tspan>')
+        && str_contains($lockupSvg, $knightHead)
+);
+
+check(
+    'the favicon is the same knight, not a second design',
+    str_contains((string) file_get_contents($faviconFile), $knightHead)
+);
+
+$appSource = (string) file_get_contents($root . '/web/src/App.tsx');
+$homeSource = (string) file_get_contents($root . '/web/src/Home.tsx');
+
+check('the header renders the mark', str_contains($appSource, 'src="/app/boardsim-mark.svg"'));
+check('the homepage renders the lockup', str_contains($homeSource, 'src="/app/boardsim-logo.svg"'));
+check(
+    'the header no longer draws its own letters',
+    preg_match('#className="bs-brand__mark"[^>]*>\s*BS#', $appSource) !== 1
+);
+check(
+    'both images declare their size, so nothing shifts while they load',
+    str_contains($appSource, 'width={42}')
+        && str_contains($appSource, 'height={42}')
+        && str_contains($homeSource, 'width={320}')
+        && str_contains($homeSource, 'height={88}')
+);
+check(
+    'the favicon is declared in the served shell',
+    str_contains($source, 'rel="icon" href="/app/favicon.svg"')
+);
 
 section('Routing rules');
 
