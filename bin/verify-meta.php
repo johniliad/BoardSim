@@ -17,13 +17,21 @@ declare(strict_types=1);
  *   - .htaccess serves those files as files and redirects the duplicate shell.
  *
  *   php bin/verify-meta.php
+ *   php bin/verify-meta.php --require-build   # CI: the SPA must have been built
+ *
+ * `public/app/` is generated and gitignored, so a fresh clone has no built shell.
+ * By default the build-output half is reported as SKIP with the command that
+ * fixes it; `--require-build` turns the absence into a failure, which is what the
+ * CI front-end job wants after it has run `npm run build`.
  */
 $root = dirname(__DIR__);
 $canonical = 'https://boardsim.iliadis.net/';
 $ogTitle = 'BoardSim | Executive decision-making under pressure';
+$requireBuild = in_array('--require-build', $argv ?? [], true);
 
 $passed = 0;
 $failed = 0;
+$skipped = 0;
 
 function check(string $label, bool $ok, string $detail = ''): void
 {
@@ -43,6 +51,17 @@ function check(string $label, bool $ok, string $detail = ''): void
 function section(string $title): void
 {
     printf("\n== %s ==\n", $title);
+}
+
+/**
+ * Report something that cannot be measured here, without pretending it passed.
+ */
+function skip(string $label, string $reason): void
+{
+    global $skipped;
+
+    $skipped++;
+    printf("  SKIP  %s — %s\n", $label, $reason);
 }
 
 /**
@@ -129,7 +148,22 @@ section('The served shell (build output)');
 $builtPath = $root . '/public/app/index.html';
 
 if (!is_file($builtPath)) {
-    check('public/app/index.html exists', false, 'run cd web && npm run build');
+    // public/app/ is generated and gitignored: a clean checkout legitimately has
+    // no built shell. Failing here would make the check order-dependent, which is
+    // how it produced a red build on a machine that had simply not built yet.
+    if ($requireBuild) {
+        check(
+            'public/app/index.html exists',
+            false,
+            'run cd web && npm run build first (--require-build makes this fatal)'
+        );
+    } else {
+        skip(
+            'the built shell',
+            'public/app/index.html is not built — run cd web && npm run build, '
+            . 'or pass --require-build to make its absence fatal'
+        );
+    }
 } else {
     checkShell('public/app/index.html', (string) file_get_contents($builtPath), $canonical, $ogTitle);
 }
@@ -227,6 +261,10 @@ check(
 );
 check('the author URL is the one in the repo', in_array('https://www.iliadis.net', $origins, true));
 
-printf("\n%d passed, %d failed\n", $passed, $failed);
+printf("\n%d passed, %d failed, %d skipped\n", $passed, $failed, $skipped);
+
+if ($skipped > 0) {
+    printf("Skipped checks are optional inputs, not passes: see the SKIP lines above.\n");
+}
 
 exit($failed === 0 ? 0 : 1);
