@@ -68,6 +68,19 @@ if (str_starts_with($path, '/v1')) {
     return true;
 }
 
+// Mirrors the discovery guard in public/.htaccess: a static file that is not on
+// disk is a 404. Answering /robots.txt with the SPA shell and HTTP 200 is how a
+// deployment missing the discovery files passed a status-code test while telling
+// every crawler the site had no policy.
+if (in_array($path, ['/robots.txt', '/sitemap.xml', '/llms.txt'], true)
+    && !is_file($docroot . $path)) {
+    http_response_code(404);
+    header('Content-Type: text/plain; charset=utf-8');
+    echo "Not Found\n";
+
+    return true;
+}
+
 // Mirrors public/.htaccess: the shell answers at / only, so the address the
 // build writes it to redirects rather than serving a second copy.
 if ($path === '/app/index.html') {

@@ -305,9 +305,10 @@ $readme = "BoardSim {$version} — deploy by copying files\n"
     . "   {$config['backend']} so the folder is created there.\n"
     . "3. In the backend, copy config.local.php.example to config.local.php and\n"
     . "   fill in the password.\n"
-    . "4. File Manager: upload docroot.zip and extract it into\n"
-    . "   {$config['docroot']} (it must end up holding .htaccess, app/, api/,\n"
-    . "   robots.txt, sitemap.xml and llms.txt).\n"
+    . "4. File Manager: upload docroot-{$version}.zip (or docroot.zip) and extract it\n"
+    . "   into {$config['docroot']}. It must end up holding .htaccess, app/, api/,\n"
+    . "   robots.txt, sitemap.xml and llms.txt — all six at that level, none inside\n"
+    . "   app/: robots.txt and sitemap.xml are only honoured at the origin root.\n"
     . "5. Optional, for an instant schema: phpMyAdmin → SQL → paste install.sql.\n"
     . "6. cPanel → Cron Jobs: paste the lines from cron.txt.\n"
     . "7. Open https://{$config['domain']}/v1/health → status ok.\n"
@@ -326,6 +327,65 @@ if ($options['zip']) {
         $zips['backend.zip'] = zipTree($backendOut, $outRoot . '/backend.zip');
     } catch (Throwable $e) {
         fail(['Cannot create the zip archives: ' . $e->getMessage()]);
+    }
+
+    // The archive is what gets uploaded, so the build reads it back instead of
+    // trusting the directory it came from. A docroot zip without the discovery
+    // files has already shipped once: the SPA fallback then answers /robots.txt
+    // with HTML, Google sees the homepage as 403, and every artefact-level test
+    // still passes because the directory on this machine is complete.
+    $required = [
+        'docroot.zip' => [$docrootOut, ['.htaccess', 'robots.txt', 'sitemap.xml', 'llms.txt', 'app/index.html', 'api/index.php']],
+        'backend.zip' => [$backendOut, ['.htaccess', 'src/bootstrap.php', 'bin/migrate.php']],
+    ];
+
+    if ($config['layout'] === 'split') {
+        $required['docroot.zip'][1][] = 'api/backend.php';
+    }
+
+    foreach ($required as $name => [$tree, $entries]) {
+        $archive = $outRoot . '/' . $name;
+
+        try {
+            $names = zipNames($archive);
+        } catch (Throwable $e) {
+            fail([$e->getMessage(), 'The archive cannot be verified, so it must not be uploaded.']);
+        }
+
+        $problems = [];
+
+        foreach ($entries as $entry) {
+            if (!is_file($tree . '/' . $entry) || filesize($tree . '/' . $entry) === 0) {
+                $problems[] = "{$entry} is missing or empty in {$tree}";
+            }
+
+            if (!in_array($entry, $names, true)) {
+                $problems[] = "{$name} does not contain {$entry}";
+            }
+        }
+
+        if ($problems !== []) {
+            // Never leave an unverified archive on disk: it is exactly the file
+            // that gets uploaded at midnight, and it looks complete.
+            foreach (['docroot.zip', 'backend.zip'] as $unverified) {
+                @unlink($outRoot . '/' . $unverified);
+            }
+
+            fail(array_merge($problems, [
+                'The archive is the artefact; a complete directory is not enough.',
+            ]));
+        }
+
+        // Same bytes, second name: a file list cannot tell 1.2.0 from 1.2.2 when
+        // only PHP and HTML changed, and neither can the operator at 01:00.
+        $versioned = $outRoot . '/' . preg_replace('/\.zip$/', '', $name)
+            . '-' . preg_replace('/[^A-Za-z0-9._-]+/', '-', $version) . '.zip';
+
+        if (!copy($archive, $versioned)) {
+            fail(["Cannot write {$versioned}"]);
+        }
+
+        $zips[$name] .= '  +  ' . basename($versioned);
     }
 }
 
@@ -639,4 +699,83 @@ function zipTree(string $directory, string $zipPath): string
     }
 
     return $label;
+}
+
+/**
+ * The file names inside a zip archive, read back from the archive itself.
+ *
+ * ZipArchive when the extension is loaded (`composer check` and CI have it);
+ * otherwise `tar -tf`, because bsdtar reads zip archives and ships with Windows
+ * 10+. Names only: sizes would have to be parsed out of a tar listing whose field
+ * layout differs between GNU and BSD tar, and content is already proven in the
+ * tree this archive was just built from. A listing that cannot be read is a hard
+ * failure — an unverifiable artefact is not an artefact.
+ *
+ * @return list<string>
+ */
+function zipNames(string $zipPath): array
+{
+    if (!is_file($zipPath)) {
+        throw new RuntimeException("No archive at {$zipPath}");
+    }
+
+    if (class_exists('ZipArchive')) {
+        $zip = new ZipArchive();
+
+        if ($zip->open($zipPath) !== true) {
+            throw new RuntimeException("Cannot open {$zipPath}");
+        }
+
+        $names = [];
+
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $stat = $zip->statIndex($i);
+
+            if ($stat !== false) {
+                $names[] = zipEntryName((string) $stat['name']);
+            }
+        }
+
+        $zip->close();
+
+        return $names;
+    }
+
+    $output = [];
+    $status = 0;
+
+    exec('tar -tf ' . escapeshellarg($zipPath) . ' 2>&1', $output, $status);
+
+    if ($status !== 0) {
+        throw new RuntimeException(
+            "Cannot list {$zipPath}: " . trim(implode(' ', array_slice($output, 0, 3)))
+        );
+    }
+
+    $names = [];
+
+    foreach ($output as $line) {
+        $name = zipEntryName(trim($line));
+
+        if ($name !== '' && !str_ends_with($name, '/')) {
+            $names[] = $name;
+        }
+    }
+
+    return $names;
+}
+
+/**
+ * Normalise an entry name so the two listing backends agree: no leading "./",
+ * no leading slash, forward slashes only.
+ */
+function zipEntryName(string $name): string
+{
+    $name = str_replace('\\', '/', $name);
+
+    while (str_starts_with($name, './')) {
+        $name = substr($name, 2);
+    }
+
+    return ltrim($name, '/');
 }

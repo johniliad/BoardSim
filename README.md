@@ -124,7 +124,7 @@ php bin/verify-ratelimit.php     # rate-limit decisions per client, action and w
 php bin/verify-meta.php          # metadata + discovery files; --require-build insists public/app/ exists
 php bin/verify-contrast.php      # WCAG contrast ratios and target sizes, measured
 php bin/verify-http.php          # HTTP contract for the SPA
-php bin/verify-deploy.php --base=https://boardsim.iliadis.net   # a live origin
+php bin/verify-deploy.php --base=https://boardsim.iliadis.net   # a live origin, not the artefact
 php bin/verify-refs.php          # resolve every official source URL (host only)
 php bin/purge.php --dry-run      # retention: show the 7-day cutoff, delete nothing
 php bin/purge.php                # retention: physically delete runs past the ceiling
@@ -219,6 +219,20 @@ a check must not depend on whether someone has run the front-end build. CI runs
 it twice: once as-is for the source and discovery files, and once with
 `--require-build` in the front-end job, after `npm run build`, where the absence of
 the shell really is a failure.
+
+Three deploy-time rules exist because the opposite of each one produced a silent
+outage on this site:
+
+- `/` is a directory. The rewrite maps the empty path to the shell *before* its
+  real-file test, or Apache stops at `-d`, finds no `DirectoryIndex` and answers
+  **403** to every crawler while the SPA still renders in a browser.
+- A missing discovery file is a **404**, not the SPA shell with HTTP 200, so an
+  incomplete upload announces itself.
+- The build reads its own archives back and refuses to finish if `docroot.zip` is
+  missing any of its six key files, then writes a release-named copy
+  (`docroot-<version>.zip`); `bin/verify-deploy.php` compares the **served shell
+  byte-for-byte** with the local build, because a release that changes only PHP and
+  HTML keeps the same JS asset hash and would otherwise look deployed.
 
 ### Licence
 

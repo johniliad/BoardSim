@@ -238,6 +238,22 @@ check(
     str_contains($htaccess, '<Files "llms.txt">')
 );
 
+// "/" is a directory, so the real-file test stops the ruleset before the SPA
+// fallback and Apache looks for a DirectoryIndex the build does not create. That
+// returned 403 to every crawler while a browser still rendered the app. The rule
+// that fixes it must exist, and it must come before the file test.
+$rootRule = strpos($htaccess, 'RewriteRule ^$ app/index.html [L]');
+$fileTest = strpos($htaccess, 'RewriteCond %{REQUEST_FILENAME} -f [OR]');
+
+check(
+    'the document root is mapped to the shell before the real-file test',
+    $rootRule !== false && $fileTest !== false && $rootRule < $fileTest
+);
+check(
+    'a missing discovery file is a 404, not the SPA fallback',
+    str_contains($htaccess, 'RewriteRule ^(robots\\.txt|sitemap\\.xml|llms\\.txt)$ - [R=404,L]')
+);
+
 section('One canonical origin');
 
 $origins = [];
