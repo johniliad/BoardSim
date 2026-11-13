@@ -5,13 +5,14 @@
   justify-content: space-between; gap: var(--space-4) var(--space-6);
 }
 .bs-brand { display: inline-flex; align-items: center; gap: var(--space-3); color: var(--color-ink); text-decoration: none; }
-.bs-brand__mark {
-  display: grid; width: 42px; aspect-ratio: 1; place-items: center;
-  border-radius: var(--radius-control); background: var(--color-accent-strong);
-  color: var(--color-paper); font-size: 0.88rem; font-weight: 700; letter-spacing: 0.04em;
-}
+/* The knight, as drawn in web/public/boardsim-mark.svg. Size is fixed so the
+   header height does not depend on the image having loaded. */
+.bs-brand__mark { display: block; flex: none; width: 42px; height: 42px; }
 .bs-brand__name { display: grid; gap: var(--space-1); font-weight: 700; line-height: 1.2; }
 .bs-brand__tagline { color: var(--color-muted); font-size: 0.72rem; font-weight: 500; letter-spacing: 0.07em; }
+/* The full lockup on the homepage: intrinsic 320x88, so the width/height
+   attributes keep the space reserved and nothing jumps while it loads. */
+.bs-brand-lockup { display: block; width: min(320px, 76vw); height: auto; margin: 0 0 var(--space-4); }
 .bs-nav { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); }
 .bs-nav a {
   display: inline-flex; min-height: 44px; align-items: center;

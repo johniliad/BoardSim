@@ -41,6 +41,7 @@ on a fresh clone.
 | **Rate limiting** | **Done — per-client fixed window on run creation, decisions, shares and reads; 429 with `Retry-After`** |
 | **Accessibility measurement** | **Done — contrast and target sizes computed and asserted, not asserted** |
 | **Static metadata and discovery** | **Done — author/canonical/Open Graph/JSON-LD `WebApplication` in the served HTML, plus `robots.txt`, stamped `sitemap.xml` and `llms.txt` at the origin root** |
+| **Application logo** | **Done — knight mark and full lockup drawn as SVG: header, homepage hero, favicon and the JSON-LD `logo`/`image`, each asserted by `bin/verify-meta.php`** |
 | **Acceptance traceability (07)** | **Done — 41 requirements mapped, gaps named: `docs/acceptance-matrix.md`** |
 | **Public demo (06)** | **Done — `DEMO-001`, unscored and unpersisted; the scorer is never constructed** |
 | **Board room (06)** | **Done — 3 challenge cards, advisory 5-minute timer, no 8th field** |
@@ -233,6 +234,31 @@ outage on this site:
   (`docroot-<version>.zip`); `bin/verify-deploy.php` compares the **served shell
   byte-for-byte** with the local build, because a release that changes only PHP and
   HTML keeps the same JS asset hash and would otherwise look deployed.
+
+### The logo
+
+The identity is drawn as SVG in `web/public/`, so it ships with the site rather
+than as a binary nobody can edit:
+
+- `boardsim-mark.svg` — the knight alone, a navy-to-blue gradient piece with its
+  two-step base. Used at 42 px in the header.
+- `boardsim-logo.svg` — the lockup: mark, `Board` in navy, `Sim` in blue, and the
+  short rule beneath, for the homepage hero.
+- `favicon.svg` — the same knight, inset so it survives 16 px.
+
+Two decisions worth keeping. The header's wordmark stays **real text**, so the mark
+next to it is `alt=""` and a screen reader reads the name once; on the homepage the
+lockup carries `alt="BoardSim"` and the `<h1>` makes the page's statement. And both
+images declare `width`/`height`, so the space is reserved before they load and the
+header cannot jump.
+
+There is deliberately no `og:image`: social platforms need a raster, and a
+generated PNG would go stale the moment the logo changes. Supply a 1200×630 PNG
+and it is one `<meta>` line plus a line in the JSON-LD.
+
+`bin/verify-meta.php` asserts the three files parse, that the mark and the favicon
+are the same drawing, that the header and hero reference them, that the sizes are
+declared, and that the JSON-LD `logo`/`image` URLs match what is served.
 
 ### Licence
 
