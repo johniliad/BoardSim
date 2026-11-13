@@ -1,0 +1,130 @@
+# BoardSim — NIST Cybersecurity Framework 2.0 function per decision rule
+#
+# 07_ACCEPTANCE_TESTS.md asks each rule to name a NIST function, so a board
+# reader can see which part of the operating model a rule belongs to. That
+# mapping is authored judgement, not law: it lives here as a versioned overlay
+# and is marked SIMULATION_ASSUMPTION.
+#
+# Why an overlay rather than the rule catalogue: 03_DECISION_RULES.md is
+# SHA-256 pinned and immutable. Adding a presentation mapping there would change
+# the pinned bytes and every policy hash. This file is loaded on its own, is
+# reported with its own version and hash in GET /v1/glossary, and is deliberately
+# NOT part of the regulatory or content bundles — so no run's pins move.
+#
+# The function is the primary CSF 2.0 category the rule belongs to:
+#   GV Govern · ID Identify · PR Protect · DE Detect · RS Respond · RC Recover
+# A rule with a defensible secondary function keeps its primary here; the
+# mapping is a navigation aid, not a compliance claim.
+
+schema_version: "1.0.0"
+overlay_id: "rule_nist_functions"
+version: "1.0.0"
+
+provenance:
+  source_kind: SIMULATION_ASSUMPTION
+  counsel_reviewed: false
+  psychometrically_calibrated: false
+
+functions:
+  GV: Govern
+  ID: Identify
+  PR: Protect
+  DE: Detect
+  RS: Respond
+  RC: Recover
+
+rules:
+  # Activate coordinated incident leadership
+  DR-001: RS
+  # Preserve service with explicit safeguards
+  DR-002: RS
+  # Preserve evidence and narrow scope
+  DR-003: RS
+  # Immediate broad containment
+  DR-004: RS
+  # Explicit recovery readiness and DR validation
+  DR-005: RC
+  # Seek counsel and classify potential reporting
+  DR-006: GV
+  # Accelerate growth with a published risk boundary
+  DR-007: GV
+  # Document residual risk and accountable owner
+  DR-008: GV
+  # Quantify business and financial impact
+  DR-009: ID
+  # Fund minimum viable controls before acceleration
+  DR-010: PR
+  # Transparent and timely stakeholder communication
+  DR-011: RS
+  # Commission independent specialist assistance
+  DR-012: RS
+  # Bounded monitoring while investigating
+  DR-013: DE
+  # Defer escalation despite known material risk
+  DR-014: GV
+  # Communicate certainty unsupported by evidence
+  DR-015: GV
+  # Apply hard limits to supplier dependency
+  DR-016: GV
+  # Demand measurable transformation milestones
+  DR-017: GV
+  # Neglect known operational dependencies
+  DR-018: ID
+  # Protect legal holds and evidence integrity
+  DR-019: RS
+  # Make financial allocation proportional to exposure
+  DR-020: GV
+  # Accept unrestricted risk with no owner
+  DR-021: GV
+  # Escalate with options not ultimatums
+  DR-022: GV
+  # Adapt controls to operational context
+  DR-023: PR
+  # Prioritize staff capability and sustainable load
+  DR-024: PR
+  # Unplanned outsourcing of critical capability
+  DR-025: GV
+  # Review compliance obligations by entity and date
+  DR-026: GV
+  # Miss an evidenced notification action
+  DR-027: RS
+  # Retain optionality with phased delivery
+  DR-028: GV
+  # Pause unsafe AI-driven action pending investigation
+  DR-029: RS
+  # Correct bias and human oversight controls
+  DR-030: PR
+  # Conceal impact or bypass escalation
+  DR-031: GV
+  # Consider dual running and rollback
+  DR-032: PR
+  # Unverified public or customer notification
+  DR-033: RS
+  # Proactively structure factual customer updates
+  DR-034: RS
+  # Seek emergency funds with accountable controls
+  DR-035: GV
+  # Over-allocate to speed without a control floor
+  DR-036: PR
+  # One-size-fits-all freeze despite business harm
+  DR-037: GV
+  # Retain learning loop and remediation ownership
+  DR-038: ID
+  # Explicit legal clock and evidence timestamps
+  DR-039: GV
+  # Unqualified guarantee of future safety
+  DR-040: GV
+  # Board brief — Situation
+  DR-041: GV
+  # Board brief — Business impact
+  DR-042: GV
+  # Board brief — Uncertainty and risk
+  DR-043: GV
+  # Board brief — Decision and alternative
+  DR-044: GV
+  # Board brief — Investment and cost
+  DR-045: GV
+  # Board brief — Residual risk and owner
+  DR-046: GV
+  # Board brief — Specific board decision requested
+  DR-047: GV

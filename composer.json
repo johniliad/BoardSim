@@ -1,0 +1,58 @@
+{
+  "name": "johniliadis/boardsim",
+  "description": "BoardSim - executive cybersecurity decision simulator. Deterministic scoring and regulatory engine.",
+  "type": "project",
+  "license": "Apache-2.0",
+  "authors": [
+    {
+      "name": "Dr. John Iliadis",
+      "homepage": "https://www.iliadis.net"
+    }
+  ],
+  "require": {
+    "php": ">=8.2",
+    "ext-json": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "BoardSim\\": "src/"
+    }
+  },
+  "scripts": {
+    "manifest": "php bin/verify-manifest.php",
+    "hygiene": "php bin/verify-hygiene.php",
+    "content": "php bin/content-build.php --check",
+    "glossary": "php bin/verify-glossary.php",
+    "ratelimit": "php bin/verify-ratelimit.php",
+    "meta": "php bin/verify-meta.php",
+    "contrast": "php bin/verify-contrast.php",
+    "regulatory": "php bin/verify-regulatory.php",
+    "scoring": "php bin/verify-scoring.php",
+    "api": "php bin/verify-api.php",
+    "dominance": "php tools/dominance-report.php",
+    "enumerate": "php bin/enumerate.php",
+    "rescore": "php bin/rescore.php 1.0.0",
+    "yaml": "php tools/smoke-yaml.php",
+    "policy": "php tools/smoke-policy.php",
+    "dev": "php bin/dev.php",
+    "migrate": "php bin/migrate.php",
+    "build-deploy": "php bin/build-deploy.php",
+    "deploy": "php bin/verify-deploy.php",
+    "check": [
+      "@hygiene",
+      "@manifest",
+      "@yaml",
+      "@policy",
+      "@content",
+      "@glossary",
+      "@ratelimit",
+      "@meta",
+      "@contrast",
+      "@regulatory",
+      "@scoring"
+    ]
+  },
+  "config": {
+    "sort-packages": true
+  }
+}

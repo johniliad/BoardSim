@@ -1,0 +1,11 @@
+# BoardSim backend — this directory is outside the DocumentRoot.
+#
+# It is deployed as a sibling of public_html (e.g. /home/USER/boardsim-app) and
+# Apache therefore never reads this file. It exists for one reason: if a document
+# root is ever pointed here by mistake, deny everything rather than serve src/,
+# config.local.php, scenarios/ and the regulatory register as static files.
+#
+# If you can read this in a browser, your DocumentRoot is wrong and you are
+# exposing the application's source and its configuration pointer.
+
+Require all denied

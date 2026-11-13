@@ -1,0 +1,953 @@
+# BoardSim — F-2 Layer 2: authored regulatory facts per scenario
+#
+# These are fictional entity and incident facts, tagged REGULATORY_ASSERTION or
+# SCENARIO_INJECT. They never assert law: they supply the inputs that the Layer 1
+# predicates evaluate. Every value traces to text in the pinned scenario file, and
+# the evidence is recorded in `rationale`.
+#
+# Resolution rule: within a key the highest visible_from_stage wins, so an S2
+# assertion deterministically overrides its S1 placeholder.
+#
+# Reconciliation note: BS-003 and BS-013 deliberately differ from the first draft
+# of the F-2 specification. That draft held BS-003 at PENDING_CLASSIFICATION for
+# every stage and declared BS-013 outside DORA scope. Both contradict the pinned
+# scenario text, which is the fact of record here. See overlays/README.md.
+
+schema_version: "1.0.0"
+overlay_id: "scenario_regulatory_facts"
+regulatory_overlay_version: "1.1.0"
+
+provenance:
+  source_kind: SIMULATION_ASSUMPTION
+  counsel_reviewed: false
+  psychometrically_calibrated: false
+
+scenarios:
+  # ==========================================================================
+  # BS-003 — Data Exfiltration, Unknown Scope
+  # At S1 the dataset identity, receiver and purpose are NOT established, so the
+  # status is genuinely unresolved. The S2 inject resolves scope and awareness.
+  # ==========================================================================
+  BS-003:
+    counsel_reviewed: false
+    regulatory_facts:
+      - id: RF-BS003-01
+        key: entity_in_scope
+        type: tri_bool
+        value: unknown
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: Subsidiary classification under the national NIS2 transposition is unverified.
+      - id: RF-BS003-02
+        key: national_transposition_applicable
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS003-03
+        key: personal_data_processing
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS003-04
+        key: controller
+        type: tri_bool
+        value: unknown
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: Controller or processor status for the affected tenant dataset is unresolved at S1.
+      - id: RF-BS003-05
+        key: role_confirmed
+        type: tri_bool
+        value: unknown
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS003-06
+        key: listed_digital_provider_or_trust_service
+        type: tri_bool
+        value: unknown
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS003-07
+        key: greek_entity_and_scoped
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS003-08
+        key: dora_financial_entity
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: A technology services provider is not a DORA financial entity.
+      - id: RF-BS003-09
+        key: relevant_ict_third_party
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS003-10
+        key: relevant_arrangement
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS003-11
+        key: manufacturer_scoped_product
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS003-12
+        key: high_risk_ai_in_scope
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS003-13
+        key: deployer_of_high_risk_ai
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS003-14
+        key: provider_high_risk_ai
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+
+      # --- Incident, materiality and timestamps at S1 ---
+      - id: RF-BS003-15
+        key: significant_incident_confirmed
+        type: tri_bool
+        value: unknown
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS003-16
+        key: personal_data_breach_confirmed
+        type: tri_bool
+        value: unknown
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: S1 states a breach is possible, not established.
+      - id: RF-BS003-17
+        key: risk_not_unlikely
+        type: tri_bool
+        value: unknown
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS003-18
+        key: high_risk_to_individuals
+        type: tri_bool
+        value: unknown
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS003-19
+        key: dora_major_ict_incident_classified
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS003-20
+        key: classification_data_available
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS003-21
+        key: reportable_event
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS003-22
+        key: serious_incident_confirmed
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS003-23
+        key: solely_automated_decision
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS003-24
+        key: legal_or_similarly_significant_effect
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS003-25
+        key: applicable_effective_date
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS003-26
+        key: awareness_time_known
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: No statutory awareness clock starts while neither breach nor data class is confirmed.
+      - id: RF-BS003-27
+        key: awareness_time
+        type: timestamp_iso8601
+        value: null
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS003-28
+        key: classification_timestamp_known
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS003-29
+        key: classification_time
+        type: timestamp_iso8601
+        value: null
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS003-30
+        key: date_at_least_2026_09_11
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+
+      # --- Stage 2: the inject resolves scope, role, breach and awareness ---
+      - id: RF-BS003-31
+        key: controller
+        type: tri_bool
+        value: true
+        visible_from_stage: S2
+        source_kind: SCENARIO_INJECT
+        rationale: S2 states "controller became aware at 10:30", establishing controller role.
+      - id: RF-BS003-32
+        key: role_confirmed
+        type: tri_bool
+        value: true
+        visible_from_stage: S2
+        source_kind: SCENARIO_INJECT
+      - id: RF-BS003-33
+        key: personal_data_breach_confirmed
+        type: tri_bool
+        value: true
+        visible_from_stage: S2
+        source_kind: SCENARIO_INJECT
+        rationale: S2 states logs show export of an identified personal dataset.
+      - id: RF-BS003-34
+        key: risk_not_unlikely
+        type: tri_bool
+        value: true
+        visible_from_stage: S2
+        source_kind: SCENARIO_INJECT
+        rationale: S2 states risk to individuals is assessed as plausible.
+      - id: RF-BS003-35
+        key: awareness_time_known
+        type: tri_bool
+        value: true
+        visible_from_stage: S2
+        source_kind: SCENARIO_INJECT
+      - id: RF-BS003-36
+        key: awareness_time
+        type: timestamp_iso8601
+        value: "2026-11-12T10:30:00Z"
+        visible_from_stage: S2
+        source_kind: SCENARIO_INJECT
+        rationale: The inject fixes awareness at 10:30 on the simulation date.
+      - id: RF-BS003-37
+        key: internal_escalation_started_at
+        type: timestamp_iso8601
+        value: "2026-11-12T10:30:00Z"
+        visible_from_stage: S2
+        source_kind: REGULATORY_ASSERTION
+        rationale: Internal escalation tracker only; never treated as a statutory deadline.
+
+  # ==========================================================================
+  # BS-013 — Major Supplier Failure (financial entity, DORA in scope)
+  # S1: the entity is in scope and aware, but the major-incident classification
+  # is not yet made, so every reporting clock is still blocked.
+  # ==========================================================================
+  BS-013:
+    counsel_reviewed: false
+    regulatory_facts:
+      - id: RF-BS013-01
+        key: entity_in_scope
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: The entity meets the EU NIS2 sector and size thresholds.
+      - id: RF-BS013-02
+        key: national_transposition_applicable
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS013-03
+        key: personal_data_processing
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS013-04
+        key: controller
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: The entity determines purposes and means for its customer personal data.
+      - id: RF-BS013-05
+        key: role_confirmed
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS013-06
+        key: listed_digital_provider_or_trust_service
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS013-07
+        key: greek_entity_and_scoped
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS013-08
+        key: dora_financial_entity
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: Financial services entity; all three declared regulatory_refs are DORA instruments.
+      - id: RF-BS013-09
+        key: relevant_ict_third_party
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: A hosted payment processor is an ICT third-party supporting a critical function.
+      - id: RF-BS013-10
+        key: relevant_arrangement
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS013-11
+        key: manufacturer_scoped_product
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS013-12
+        key: high_risk_ai_in_scope
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS013-13
+        key: deployer_of_high_risk_ai
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS013-14
+        key: provider_high_risk_ai
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+
+      # --- Incident, materiality and timestamps at S1 ---
+      - id: RF-BS013-15
+        key: significant_incident_confirmed
+        type: tri_bool
+        value: unknown
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS013-16
+        key: personal_data_breach_confirmed
+        type: tri_bool
+        value: unknown
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: The scenario asserts a supplier outage, not a personal data breach.
+      - id: RF-BS013-17
+        key: risk_not_unlikely
+        type: tri_bool
+        value: unknown
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS013-18
+        key: high_risk_to_individuals
+        type: tri_bool
+        value: unknown
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS013-19
+        key: dora_major_ict_incident_classified
+        type: tri_bool
+        value: unknown
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: S1 says impact magnitude is still being classified.
+      - id: RF-BS013-20
+        key: classification_data_available
+        type: tri_bool
+        value: unknown
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS013-21
+        key: reportable_event
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS013-22
+        key: serious_incident_confirmed
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS013-23
+        key: solely_automated_decision
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS013-24
+        key: legal_or_similarly_significant_effect
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS013-25
+        key: applicable_effective_date
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS013-26
+        key: awareness_time_known
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: F131 fixes awareness at 06:40, when the outage was observed.
+      - id: RF-BS013-27
+        key: awareness_time
+        type: timestamp_iso8601
+        value: "2026-11-12T06:40:00Z"
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS013-28
+        key: classification_timestamp_known
+        type: tri_bool
+        value: unknown
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: Classification has not yet occurred, so the timestamp is unresolved rather than absent. Encoding this as false would let Kleene AND wrongly rule the trigger out.
+      - id: RF-BS013-29
+        key: classification_time
+        type: timestamp_iso8601
+        value: null
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS013-30
+        key: date_at_least_2026_09_11
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+
+      # --- Stage 2: the inject establishes the DORA major classification ---
+      - id: RF-BS013-31
+        key: dora_major_ict_incident_classified
+        type: tri_bool
+        value: true
+        visible_from_stage: S2
+        source_kind: SCENARIO_INJECT
+        rationale: S2 states impacts sufficient for predefined DORA major classification.
+      - id: RF-BS013-32
+        key: classification_data_available
+        type: tri_bool
+        value: true
+        visible_from_stage: S2
+        source_kind: SCENARIO_INJECT
+      - id: RF-BS013-33
+        key: classification_timestamp_known
+        type: tri_bool
+        value: true
+        visible_from_stage: S2
+        source_kind: SCENARIO_INJECT
+      - id: RF-BS013-34
+        key: classification_time
+        type: timestamp_iso8601
+        value: "2026-11-12T08:30:00Z"
+        visible_from_stage: S2
+        source_kind: SCENARIO_INJECT
+        rationale: The S2 inject opens at 08:30, the moment of classification.
+
+  # ==========================================================================
+  # BS-001 — Ransomware at 08:00 (healthcare)
+  # The scenario states that evidence of personal data exposure is still
+  # unconfirmed at S3, so no reporting clock may start at any stage.
+  # ==========================================================================
+  BS-001:
+    counsel_reviewed: false
+    regulatory_facts:
+      - id: RF-BS001-01
+        key: entity_in_scope
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: Healthcare provider above the NIS2 size threshold (1800 staff, EUR 240M revenue).
+      - id: RF-BS001-02
+        key: national_transposition_applicable
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS001-03
+        key: controller
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS001-04
+        key: personal_data_processing
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS001-05
+        key: personal_data_breach_confirmed
+        type: tri_bool
+        value: unknown
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: S3 states evidence of personal data exposure is still unconfirmed.
+      - id: RF-BS001-06
+        key: risk_not_unlikely
+        type: tri_bool
+        value: unknown
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS001-07
+        key: significant_incident_confirmed
+        type: tri_bool
+        value: unknown
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: S3 option A is to run a sector-specific significance assessment, so significance is not yet established.
+      - id: RF-BS001-08
+        key: awareness_time_known
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: The entity has a recorded moment of incident awareness, even though reportability is unresolved.
+      - id: RF-BS001-09
+        key: awareness_time
+        type: timestamp_iso8601
+        value: "2026-11-12T08:00:00Z"
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: F011 fixes first observation of encryption at 08:00.
+
+  # ==========================================================================
+  # BS-002 — Privileged Account Compromise (critical infrastructure)
+  # S2 confirms unauthorised access and quantifies EUR 2.5M/day exposure, which
+  # is the point at which significance can be asserted rather than assumed.
+  # ==========================================================================
+  BS-002:
+    counsel_reviewed: false
+    regulatory_facts:
+      - id: RF-BS002-01
+        key: entity_in_scope
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: Critical infrastructure operator, 2200 staff, EUR 390M revenue.
+      - id: RF-BS002-02
+        key: national_transposition_applicable
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS002-03
+        key: significant_incident_confirmed
+        type: tri_bool
+        value: unknown
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: S1 describes suspicious privilege use, not a confirmed incident.
+      - id: RF-BS002-04
+        key: awareness_time_known
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS002-05
+        key: awareness_time
+        type: timestamp_iso8601
+        value: "2026-11-12T07:45:00Z"
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: F021 fixes first observation of anomalous privileged use at 07:45.
+      - id: RF-BS002-06
+        key: significant_incident_confirmed
+        type: tri_bool
+        value: true
+        visible_from_stage: S2
+        source_kind: SCENARIO_INJECT
+        rationale: S2 confirms unauthorised access and quantifies business loss of EUR 2.5M/day.
+
+  # ==========================================================================
+  # BS-004 — Legacy Technology vs Digital Transformation (manufacturing)
+  # A governance-only scenario: no incident, so only entity scope is needed.
+  # ==========================================================================
+  BS-004:
+    counsel_reviewed: false
+    regulatory_facts:
+      - id: RF-BS004-01
+        key: entity_in_scope
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: Manufacturing is a NIS2 Annex I sector; 5000 staff and EUR 1250M revenue.
+      - id: RF-BS004-02
+        key: national_transposition_applicable
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+
+  # ==========================================================================
+  # BS-005 — Cloud Migration Decision (financial services)
+  # Third-party concentration is the regulatory theme, so the DORA Art. 28 chain
+  # is asserted rather than left at PENDING.
+  # ==========================================================================
+  BS-005:
+    counsel_reviewed: false
+    regulatory_facts:
+      - id: RF-BS005-01
+        key: dora_financial_entity
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: Financial services entity, 3600 staff, EUR 780M revenue.
+      - id: RF-BS005-02
+        key: relevant_ict_third_party
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: The migration places customer-facing systems with a cloud provider.
+      - id: RF-BS005-03
+        key: relevant_arrangement
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: S2 discusses contractual data-portability restrictions, so an arrangement exists.
+      - id: RF-BS005-04
+        key: personal_data_processing
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS005-05
+        key: role_confirmed
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+
+  # ==========================================================================
+  # BS-006 — EUR 5M Cybersecurity Investment (financial services)
+  # ==========================================================================
+  BS-006:
+    counsel_reviewed: false
+    regulatory_facts:
+      - id: RF-BS006-01
+        key: dora_financial_entity
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: Financial services entity, 4000 staff, EUR 1100M revenue.
+      - id: RF-BS006-02
+        key: relevant_ict_third_party
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: S3 centres on a key vendor rejecting a control remediation clause.
+      - id: RF-BS006-03
+        key: relevant_arrangement
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+
+  # ==========================================================================
+  # BS-007 — Security Budget Cut (logistics)
+  # ==========================================================================
+  BS-007:
+    counsel_reviewed: false
+    regulatory_facts:
+      - id: RF-BS007-01
+        key: entity_in_scope
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: Transport and logistics fall within NIS2 Annex I; 2600 staff, EUR 480M revenue.
+      - id: RF-BS007-02
+        key: national_transposition_applicable
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+
+  # ==========================================================================
+  # BS-008 — The Board Rejects Your Recommendation (critical infrastructure)
+  # ==========================================================================
+  BS-008:
+    counsel_reviewed: false
+    regulatory_facts:
+      - id: RF-BS008-01
+        key: entity_in_scope
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: Critical infrastructure operator; 3100 staff, EUR 680M revenue.
+      - id: RF-BS008-02
+        key: national_transposition_applicable
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+
+  # ==========================================================================
+  # BS-009 — Security Talent Crisis (technology services)
+  # A B2B technology provider plausibly meets the NIS2 ICT service management
+  # entry; the classification rationale is recorded rather than assumed silently.
+  # ==========================================================================
+  BS-009:
+    counsel_reviewed: false
+    regulatory_facts:
+      - id: RF-BS009-01
+        key: entity_in_scope
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: B2B technology service provider (1200 staff, EUR 190M revenue) providing managed platform services.
+      - id: RF-BS009-02
+        key: national_transposition_applicable
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+
+  # ==========================================================================
+  # BS-010 — CISO-CIO Conflict (retail)
+  # Deliberate NOT_APPLICABLE: retail trade is not a sector listed in NIS2
+  # Annexes I or II, so a governance framework cited in the scenario does not
+  # become a statutory duty by association.
+  # ==========================================================================
+  BS-010:
+    counsel_reviewed: false
+    regulatory_facts:
+      - id: RF-BS010-01
+        key: entity_in_scope
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: Retail trade is not a listed NIS2 sector; scope would require a separate listing trigger despite 6100 staff.
+      - id: RF-BS010-02
+        key: national_transposition_applicable
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+
+  # ==========================================================================
+  # BS-011 — Security Culture Failure (financial services)
+  # ==========================================================================
+  BS-011:
+    counsel_reviewed: false
+    regulatory_facts:
+      - id: RF-BS011-01
+        key: dora_financial_entity
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: Financial services entity; 3000 staff, EUR 700M revenue.
+      - id: RF-BS011-02
+        key: personal_data_processing
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS011-03
+        key: role_confirmed
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+
+  # ==========================================================================
+  # BS-012 — Regulatory Deadline (digital infrastructure)
+  # No incident occurs in this scenario, so the reporting articles must resolve
+  # to APPLICABLE_NOT_TRIGGERED rather than to an invented deadline.
+  # ==========================================================================
+  BS-012:
+    counsel_reviewed: false
+    regulatory_facts:
+      - id: RF-BS012-01
+        key: entity_in_scope
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: Digital infrastructure operator; 2100 staff, EUR 350M revenue.
+      - id: RF-BS012-02
+        key: national_transposition_applicable
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS012-03
+        key: listed_digital_provider_or_trust_service
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: Digital infrastructure is an explicitly listed provider category.
+      - id: RF-BS012-04
+        key: significant_incident_confirmed
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: The scenario concerns implementation completion, not an incident.
+      - id: RF-BS012-05
+        key: awareness_time_known
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+
+  # ==========================================================================
+  # BS-014 — AI Incident (financial services)
+  # The high-risk classification is confirmed at S2, but every AI Act article is
+  # counsel-gated because the supplied text is the 2026 consolidation. The panel
+  # therefore reports REQUIRES_HUMAN_REVIEW rather than a computed Art. 73 clock.
+  # ==========================================================================
+  BS-014:
+    counsel_reviewed: false
+    regulatory_facts:
+      - id: RF-BS014-01
+        key: personal_data_processing
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: Loan decisions concern customer personal data.
+      - id: RF-BS014-02
+        key: solely_automated_decision
+        type: tri_bool
+        value: unknown
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: The brief states automated decision law is assessed separately, so it is not yet established.
+      - id: RF-BS014-03
+        key: legal_or_similarly_significant_effect
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: A loan refusal is a significant effect on the individual.
+      - id: RF-BS014-04
+        key: high_risk_ai_in_scope
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: S1 explicitly says high-risk status must still be established.
+      - id: RF-BS014-05
+        key: deployer_of_high_risk_ai
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS014-06
+        key: provider_high_risk_ai
+        type: tri_bool
+        value: false
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: The entity deploys a loan-decision tool rather than placing it on the market.
+      - id: RF-BS014-07
+        key: applicable_effective_date
+        type: tri_bool
+        value: unknown
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS014-08
+        key: serious_incident_confirmed
+        type: tri_bool
+        value: unknown
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: S2 states the legal definition of serious incident still needs assessment.
+      - id: RF-BS014-09
+        key: awareness_time_known
+        type: tri_bool
+        value: true
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+      - id: RF-BS014-10
+        key: awareness_time
+        type: timestamp_iso8601
+        value: "2026-11-12T10:20:00Z"
+        visible_from_stage: S1
+        source_kind: REGULATORY_ASSERTION
+        rationale: F141 fixes the erroneous refusals being observed at 10:20.
+      - id: RF-BS014-11
+        key: high_risk_ai_in_scope
+        type: tri_bool
+        value: true
+        visible_from_stage: S2
+        source_kind: SCENARIO_INJECT
+        rationale: S2 states the team confirms this is a high-risk AI system in scope.
+      - id: RF-BS014-12
+        key: deployer_of_high_risk_ai
+        type: tri_bool
+        value: true
+        visible_from_stage: S2
+        source_kind: SCENARIO_INJECT
+      - id: RF-BS014-13
+        key: solely_automated_decision
+        type: tri_bool
+        value: true
+        visible_from_stage: S2
+        source_kind: SCENARIO_INJECT
+        rationale: S1 option A treats invoking human review as the remedy, implying the pathway decided without it.
