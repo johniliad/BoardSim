@@ -95,9 +95,17 @@ content bundle fails verification.
 5. **Document root**: upload `docroot-<version>.zip` (the build also leaves an
    unversioned `docroot.zip`; prefer the named one) and extract it into the
    subdomain's document root. It must end up holding `.htaccess`, `app/`, `api/`,
-   `robots.txt`, `sitemap.xml` and `llms.txt` — the last three at the root, not
-   inside `app/`, or no crawler will find them. The build has already read the
-   archive back and failed if any of the six is absent.
+   `errors/`, `robots.txt`, `sitemap.xml`, `llms.txt` and `licences.txt` — the
+   last four at the root, not inside `app/`, or no crawler will find them. The
+   build has already read the archive back and failed if any of them is absent.
+
+   `.htaccess` carries the Cloudflare origin lock: every request that does not
+   present `X-Origin-Secret` answers `403`. Create the Cloudflare Transform Rule
+   (**Set static**, not *Add*) **before** this upload — the deploy procedure for a
+   locked origin, including rotation, is
+   [`requirements/12_CLOUDFLARE_ORIGIN_LOCK.md`](../requirements/12_CLOUDFLARE_ORIGIN_LOCK.md).
+   If the site answers 403 immediately after the upload, the rule is missing or
+   its value differs from the one in `deploy/host.config.php`.
 6. **Schema**: either paste `install.sql` into phpMyAdmin (instant), or let the
    migrate cron job do it within one tick.
 7. **Cron**: paste the three lines from `cron.txt` into cPanel → Cron Jobs. Use
@@ -105,9 +113,10 @@ content bundle fails verification.
    different major version parses the code with a different interpreter.
 8. **Verify the origin**, not just the artefact: open
    `https://boardsim.example.net/v1/health`, then run the line in `verify.txt` from
-   the workstation (`php bin/verify-deploy.php --base=… --require-ready`). A 403 on
-   `/`, or a `text/html` answer for `robots.txt`, means the docroot is not the
-   release you think it is.
+   the workstation (`php bin/verify-deploy.php --config=… --require-ready`). A 403
+   on `/`, or a `text/html` answer for `robots.txt`, means the docroot is not the
+   release you think it is. A 403 on *everything* while `verify-deploy` reports a
+   missing origin secret means the Cloudflare value and the built one differ.
 
 Before uploading, prove the artefact locally. The upload artefact points at the
 host's backend, so build a second one whose pointer aims at this checkout —
@@ -195,12 +204,19 @@ shell references an asset that no longer exists.
 
 ## 7. What only the host can verify
 
-- `.htaccess` (routing, CSP, HSTS, dotfile denial) is only truly exercised by the
-  real Apache. `php -S` ignores it; `deploy/smoke-router.php` mirrors it for the
-  pre-upload smoke test but cannot prove `AllowOverride All` is set.
+- `.htaccess` (Cloudflare origin lock, routing, CSP, HSTS, dotfile denial) is only
+  truly exercised by the real Apache. `php -S` ignores it; `deploy/smoke-router.php`
+  mirrors the routing and headers but deliberately leaves the origin lock out, so
+  the pre-upload walkthrough stays usable in a browser. The lock is therefore
+  proven where it matters: `bin/verify-deploy.php` sends one request **without**
+  the header and fails unless the origin answers `403`.
 - MySQL grants and the optional append-only trigger: cPanel usually offers only
   ALL PRIVILEGES per database, so `integrity_controls` may truthfully stay
   `["hash_chain"]`. Add the triggers in phpMyAdmin if `TRIGGER` is permitted, then
   reflect it in `/v1/health` and the methodology page.
 - AutoSSL: changing the subdomain's document root invalidates a pending
-  validation, so re-run it afterwards.
+  validation, so re-run it afterwards. The certificate authority fetches
+  `/.well-known/acme-challenge/…` and `/.well-known/pki-validation/…` **from the
+  origin address**, so those two paths are exempt from the Cloudflare origin lock
+  (`requirements/12_CLOUDFLARE_ORIGIN_LOCK.md` §1a). If renewal fails with a 403,
+  the exemption was removed from `.htaccess`, not the certificate tooling.

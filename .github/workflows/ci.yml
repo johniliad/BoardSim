@@ -25,7 +25,7 @@ jobs:
         run: php bin/verify-lint.php
       - name: Repository hygiene (no host paths)
         run: php bin/verify-hygiene.php
-      - name: Pinned manifest (29 files)
+      - name: Pinned manifest (30 files)
         run: php bin/verify-manifest.php
       - name: Scenario YAML parses
         run: php tools/smoke-yaml.php

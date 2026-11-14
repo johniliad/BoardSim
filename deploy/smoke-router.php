@@ -18,6 +18,13 @@ declare(strict_types=1);
  * everything else is the SPA fallback, dotfiles (and the backend pointer) are
  * denied.
  *
+ * One rule is deliberately NOT mirrored: the Cloudflare origin lock. Real Apache
+ * refuses any request without X-Origin-Secret, but reproducing that here would
+ * answer 403 to every browser request and defeat the purpose of the pre-upload
+ * walkthrough. The built .htaccess still carries the real value; the guard is
+ * proven on the live origin by bin/verify-deploy.php, which sends one request
+ * without the header and expects 403.
+ *
  * Development store: run the server with BOARDSIM_DEV=1 to test an artefact
  * without MySQL. `bin/verify-deploy.php` accepts mode=dev on a loopback origin.
  */
@@ -31,6 +38,24 @@ $path = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PA
 if ($path === '') {
     $path = '/';
 }
+
+// Mirrors ErrorDocument in public/.htaccess: the artefact's own branded pages are
+// served with the status they document. A missing page falls back to text so the
+// smoke test still reports a real failure instead of an empty 403.
+$errorPage = static function (int $status) use ($docroot): bool {
+    $page = $docroot . '/errors/' . $status . '.html';
+
+    http_response_code($status);
+    header('Content-Type: text/html; charset=utf-8');
+
+    if (is_file($page)) {
+        readfile($page);
+    } else {
+        printf("Error %d\n", $status);
+    }
+
+    return true;
+};
 
 // Emit the same static-channel headers public/.htaccess sets, so the smoke test
 // exercises the real CSP string rather than a copy. The backend is found through
@@ -53,13 +78,22 @@ if (is_file($backendPointer)) {
     }
 }
 
+// Mirrors public/.htaccess: an ACME or DCV validation path is reachable without
+// the origin header, because the certificate authority fetches it from the origin
+// address rather than through Cloudflare. A missing token is a 404, never the SPA.
+if (str_starts_with($path, '/.well-known/') || str_starts_with($path, '/pki-validation/')) {
+    $candidate = realpath($docroot . $path);
+
+    if ($candidate === false || !is_file($candidate)) {
+        return $errorPage(404);
+    }
+
+    return false;
+}
+
 // Mirrors the dotfile rule and the explicit denial of the backend pointer.
 if (preg_match('#(?:^|/)\.#', $path) === 1 || str_ends_with($path, '/backend.php')) {
-    http_response_code(403);
-    header('Content-Type: text/plain; charset=utf-8');
-    echo "Forbidden\n";
-
-    return true;
+    return $errorPage(403);
 }
 
 if (str_starts_with($path, '/v1')) {
@@ -74,11 +108,7 @@ if (str_starts_with($path, '/v1')) {
 // every crawler the site had no policy.
 if (in_array($path, ['/robots.txt', '/sitemap.xml', '/llms.txt'], true)
     && !is_file($docroot . $path)) {
-    http_response_code(404);
-    header('Content-Type: text/plain; charset=utf-8');
-    echo "Not Found\n";
-
-    return true;
+    return $errorPage(404);
 }
 
 // Mirrors public/.htaccess: the shell answers at / only, so the address the

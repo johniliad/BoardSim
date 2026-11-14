@@ -1,0 +1,88 @@
+BoardSim — licences
+===================
+
+This file is served by the site so that every recipient of the files a browser
+downloads receives the licence terms and the copyright notices those files carry.
+It is the readable companion to two files in the source repository:
+
+  LICENSE                the full Apache License 2.0 text for BoardSim itself
+  THIRD-PARTY-NOTICES.md the same attributions, with the reasoning behind them
+
+Source: https://github.com/johniliadis/BoardSim
+
+
+1. BoardSim
+-----------
+
+Copyright 2026 Dr. John Iliadis.
+
+Licensed under the Apache License, Version 2.0. You may obtain a copy of the
+License at:
+
+  https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed
+under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+The licence covers the application code and the authored scenario and content
+overlays. Quoted regulation identifiers and links to official publications
+(EUR-Lex, NIST, ENISA, Greek authorities) remain subject to their own sources;
+nothing here re-licenses third-party legal text.
+
+
+2. Components in the JavaScript delivered to your browser
+---------------------------------------------------------
+
+The single application bundle contains the React runtime. All of these are MIT
+licensed, and their copyright notices are preserved inside the bundle:
+
+  react            18.3.1   MIT   (c) Meta Platforms, Inc. and affiliates
+  react-dom        18.3.1   MIT   (c) Meta Platforms, Inc. and affiliates
+  scheduler        0.23.2   MIT   (c) Meta Platforms, Inc. and affiliates
+  loose-envify      1.4.0   MIT   (c) Andres Suarez
+  js-tokens         4.0.0   MIT   (c) Simon Lydell
+
+The MIT terms that apply to all five:
+
+  MIT License
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+  THE SOFTWARE.
+
+Each copyright holder above is named in the "MIT License" section of
+THIRD-PARTY-NOTICES.md with the same terms.
+
+
+3. Not distributed to browsers
+------------------------------
+
+The build and test tooling (Vite, TypeScript, esbuild, Rollup, Babel, PostCSS and
+their dependencies) runs on the build machine only. None of it is served, so its
+licences — MIT, ISC, BSD-3-Clause, CC-BY-4.0 and Apache-2.0 — are recorded in
+THIRD-PARTY-NOTICES.md for transparency rather than by obligation.
+
+
+4. No NOTICE file
+-----------------
+
+Apache-2.0 requires a NOTICE file only when redistributing code that already
+carries one. No component listed here ships one, so none is reproduced. If a
+future dependency does, it is added to THIRD-PARTY-NOTICES.md at the same time as
+the dependency.

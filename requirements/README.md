@@ -23,6 +23,8 @@ BoardSim is a **board-level executive decision simulator**, not a cyber quiz. It
 | [09_REPLAY_REPORT.md](09_REPLAY_REPORT.md) | Executed scoring enumeration and actual rule-level score trace |
 | [09_REPLAY_REPORT.md](09_REPLAY_REPORT.md) | Executed scoring enumeration and actual rule-level score trace |
 | [09_REPLAY_REPORT.md](09_REPLAY_REPORT.md) | Executed scoring enumeration and actual rule-level score trace |
+| [12_CLOUDFLARE_ORIGIN_LOCK.md](12_CLOUDFLARE_ORIGIN_LOCK.md) | **Always on** — the origin answers only Cloudflare-forwarded traffic: the header rule, where the secret lives, rotation and verification |
+
 | [engine/CONFIG.md](engine/CONFIG.md) | Single editable scoring policy and risk modifiers |
 | [engine/RULE_SCHEMA.md](engine/RULE_SCHEMA.md) | Allowed syntax, semantic validation, deterministic evaluation |
 | [scenarios/BS-001.md](scenarios/BS-001.md) – [BS-014.md](scenarios/BS-014.md) | Fourteen runnable, versioned scenario contracts |

@@ -17,7 +17,9 @@ declare(strict_types=1);
  *   - unknown /v1 routes answer with JSON 404 rather than an HTML page;
  *   - the deployed bundle is the one built from this checkout;
  *   - the security headers from public/.htaccess are actually in force;
- *   - dotfiles are denied.
+ *   - dotfiles are denied;
+ *   - the origin answers only what Cloudflare forwarded: a request without
+ *     X-Origin-Secret is refused (requirements/12_CLOUDFLARE_ORIGIN_LOCK.md).
  *
  * Read-only: it creates nothing, so it is safe to point at production. Exit code
  * 0 only when every check passes.
@@ -25,6 +27,7 @@ declare(strict_types=1);
 $root = dirname(__DIR__);
 $base = '';
 $configPath = '';
+$secretFile = '';
 $requireReady = false;
 $expectRelease = '';
 
@@ -37,6 +40,10 @@ foreach ($argv as $arg) {
         $configPath = substr($arg, strlen('--config='));
     }
 
+    if (str_starts_with($arg, '--origin-secret-file=')) {
+        $secretFile = substr($arg, strlen('--origin-secret-file='));
+    }
+
     if (str_starts_with($arg, '--expect-release=')) {
         $expectRelease = substr($arg, strlen('--expect-release='));
     }
@@ -46,14 +53,34 @@ foreach ($argv as $arg) {
     }
 }
 
-// --config=deploy/host.config.php saves repeating the origin (and gives the
-// exact value that bin/build-deploy.php baked into the artefacts).
-if ($base === '' && $configPath !== '' && is_file($configPath)) {
-    $hostConfig = require $configPath;
+// --config=deploy/host.config.php saves repeating the origin, and carries the
+// Cloudflare origin secret that bin/build-deploy.php baked into .htaccess.
+// Without it every request to a locked origin answers 403, which reads like an
+// outage rather than a missing header.
+$hostConfig = [];
 
-    if (is_array($hostConfig)) {
+if ($configPath !== '' && is_file($configPath)) {
+    $loaded = require $configPath;
+    $hostConfig = is_array($loaded) ? $loaded : [];
+
+    if ($base === '') {
         $base = (string) ($hostConfig['release_url'] ?? $hostConfig['domain'] ?? '');
     }
+}
+
+// Three sources, one per place this check runs:
+//   1. --origin-secret-file      the host, where cron has no config file and a
+//                               command line is readable by other users;
+//   2. --config                  this workstation, where the build's config lives;
+//   3. BOARDSIM_CF_ORIGIN_SECRET a one-off run.
+$originSecret = '';
+
+if ($secretFile !== '' && is_file($secretFile)) {
+    $originSecret = trim((string) file_get_contents($secretFile));
+} elseif (($hostConfig['cloudflare_origin_secret'] ?? '') !== '') {
+    $originSecret = (string) $hostConfig['cloudflare_origin_secret'];
+} else {
+    $originSecret = trim((string) getenv('BOARDSIM_CF_ORIGIN_SECRET'));
 }
 
 $base = rtrim($base, '/');
@@ -65,8 +92,15 @@ if ($base !== '' && preg_match('#^https?://#', $base) !== 1) {
 if ($base === '' || preg_match('#^https?://[^/]+#', $base) !== 1) {
     fwrite(STDERR, "Usage: php bin/verify-deploy.php --base=https://boardsim.example.net [--require-ready] [--expect-release=<sha>]\n");
     fwrite(STDERR, "       php bin/verify-deploy.php --config=deploy/host.config.php [--require-ready] [--expect-release=<sha>]\n");
+    fwrite(STDERR, "       php bin/verify-deploy.php --base=… --origin-secret-file=cloudflare-origin.secret\n");
+    fwrite(STDERR, "       (a locked origin answers 403 until X-Origin-Secret is presented)\n");
     exit(2);
 }
+
+// A loopback origin is the smoke server, which deliberately does not reproduce
+// the Cloudflare lock: a browser walkthrough of the built artefact is the point
+// of that server. Computed once, before the lock section reads it.
+$loopback = preg_match('#^https?://(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$#', $base) === 1;
 
 $passed = 0;
 $failed = 0;
@@ -138,23 +172,39 @@ function answeredBySpaFallback(array $response): bool
  *
  * @return array{status: int, headers: array<string, string>, body: string, error: string|null}
  */
-function httpGet(string $url): array
+function httpGet(string $url, bool $withOriginSecret = true): array
 {
     if (function_exists('curl_init')) {
-        return curlGet($url);
+        return curlGet($url, $withOriginSecret);
     }
 
     if (str_starts_with($url, 'http://') || extension_loaded('openssl')) {
-        return streamGet($url);
+        return streamGet($url, $withOriginSecret);
     }
 
-    return curlCliGet($url);
+    return curlCliGet($url, $withOriginSecret);
+}
+
+/**
+ * The header Cloudflare adds, replayed when this check talks to the origin
+ * directly. Empty when no secret could be resolved: the lock then answers 403 and
+ * the failure says so.
+ *
+ * @return list<string>
+ */
+function originAuthHeaders(bool $withOriginSecret): array
+{
+    global $originSecret;
+
+    return $withOriginSecret && $originSecret !== ''
+        ? ['X-Origin-Secret: ' . $originSecret]
+        : [];
 }
 
 /**
  * @return array{status: int, headers: array<string, string>, body: string, error: string|null}
  */
-function curlGet(string $url): array
+function curlGet(string $url, bool $withOriginSecret = true): array
 {
     $status = 0;
     $headers = [];
@@ -171,6 +221,7 @@ function curlGet(string $url): array
         CURLOPT_FOLLOWLOCATION => false,
         CURLOPT_TIMEOUT => 25,
         CURLOPT_USERAGENT => 'BoardSim-verify-deploy/1.0',
+        CURLOPT_HTTPHEADER => originAuthHeaders($withOriginSecret),
         CURLOPT_HEADERFUNCTION => static function ($curl, string $line) use ($ingest): int {
             $ingest($line);
 
@@ -193,7 +244,7 @@ function curlGet(string $url): array
 /**
  * @return array{status: int, headers: array<string, string>, body: string, error: string|null}
  */
-function streamGet(string $url): array
+function streamGet(string $url, bool $withOriginSecret = true): array
 {
     $status = 0;
     $headers = [];
@@ -209,6 +260,7 @@ function streamGet(string $url): array
             // look like a 200 and pass silently.
             'follow_location' => 0,
             'user_agent' => 'BoardSim-verify-deploy/1.0',
+            'header' => implode("\r\n", originAuthHeaders($withOriginSecret)),
         ],
     ]);
 
@@ -230,14 +282,22 @@ function streamGet(string $url): array
 /**
  * @return array{status: int, headers: array<string, string>, body: string, error: string|null}
  */
-function curlCliGet(string $url): array
+function curlCliGet(string $url, bool $withOriginSecret = true): array
 {
     $descriptors = [1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
-    $process = @proc_open(
-        ['curl', '-sS', '-i', '--max-time', '25', '--user-agent', 'BoardSim-verify-deploy/1.0', $url],
-        $descriptors,
-        $pipes
-    );
+
+    // Array argv, not a command string: each header value is passed as its own
+    // argument, so nothing in it is re-parsed by a shell.
+    $command = ['curl', '-sS', '-i', '--max-time', '25', '--user-agent', 'BoardSim-verify-deploy/1.0'];
+
+    foreach (originAuthHeaders($withOriginSecret) as $header) {
+        $command[] = '-H';
+        $command[] = $header;
+    }
+
+    $command[] = $url;
+
+    $process = @proc_open($command, $descriptors, $pipes);
 
     if (!is_resource($process)) {
         return [
@@ -334,6 +394,46 @@ function jsonOf(array $response): ?array
 
 printf("BoardSim deployment check — %s\n", $base);
 
+// First, because it explains every other failure: if the lock is in force and
+// this check cannot present the value, the rest of the run reports 403 sixteen
+// times and looks like the deployment is broken rather than the header missing.
+printf("\n== Cloudflare origin lock ==\n");
+
+if ($originSecret !== '') {
+    printf("        presenting an origin secret of %d characters (value not printed)\n", strlen($originSecret));
+}
+
+if ($loopback) {
+    printf(
+        "  SKIP  a loopback origin does not enforce .htaccess, so the lock is not testable here\n"
+            . "        (deploy/smoke-router.php leaves it out so a browser can walk the artefact)\n"
+    );
+} elseif ($originSecret === '') {
+    warn(
+        'the origin lock is not exercised',
+        'no origin secret: pass --origin-secret-file= or --config=deploy/host.config.php, '
+            . 'or set BOARDSIM_CF_ORIGIN_SECRET — a locked origin answers 403 without it'
+    );
+} else {
+    $unauthenticated = httpGet($base . '/', false);
+
+    if ($unauthenticated['status'] === 0 && str_contains((string) $unauthenticated['error'], 'no HTTPS transport')) {
+        fwrite(STDERR, "\n" . $unauthenticated['error'] . "\n");
+        exit(2);
+    }
+
+    expect(
+        'a request that did not come through Cloudflare is refused',
+        $unauthenticated['status'] === 403,
+        $unauthenticated,
+        sprintf(
+            'HTTP %d without X-Origin-Secret — the lock in .htaccess is not in force '
+                . '(requirements/12_CLOUDFLARE_ORIGIN_LOCK.md)',
+            $unauthenticated['status']
+        )
+    );
+}
+
 printf("\n== API routing ==\n");
 
 $health = httpGet($base . '/v1/health');
@@ -343,6 +443,15 @@ $health = httpGet($base . '/v1/health');
 if ($health['status'] === 0 && str_contains((string) $health['error'], 'no HTTPS transport')) {
     fwrite(STDERR, "\n" . $health['error'] . "\n");
     exit(2);
+}
+
+if ($health['status'] === 403 && !$loopback) {
+    printf(
+        "        hint: 403 means the origin lock is in force and this request did not carry\n"
+            . "        the Cloudflare value. Check cloudflare_origin_secret in %s (and the\n"
+            . "        Cloudflare Transform Rule) — both must hold the same string.\n",
+        $configPath !== '' ? $configPath : 'deploy/host.config.php'
+    );
 }
 
 $healthType = $health['headers']['content-type'] ?? '';
@@ -382,7 +491,6 @@ if ($healthJson !== null) {
     );
 
     $devMode = ($healthJson['mode'] ?? null) === 'dev';
-    $loopback = preg_match('#^https?://(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$#', $base) === 1;
 
     expect(
         'the deployment is not in development mode',
@@ -753,6 +861,18 @@ expect(
     $dotfile,
     sprintf('HTTP %d: public/.htaccess is not denying dotfiles', $dotfile['status'])
 );
+
+// The branded error documents are part of the artefact, not a server setting: if
+// they did not upload, the 403 above is Apache's grey page and this asserts the
+// difference. A plain-text fallback from an older artefact fails here on purpose.
+if ($dotfile['status'] === 403) {
+    expect(
+        'the refused request is answered by the branded error page',
+        str_contains($dotfile['body'], 'BoardSim') && str_contains($dotfile['body'], 'error.css'),
+        $dotfile,
+        'the 403 body is not /errors/403.html — the errors/ directory is missing from the document root (docs/error-pages.md)'
+    );
+}
 
 printf("\n%d passed, %d failed, %d warnings\n", $passed, $failed, $warned);
 

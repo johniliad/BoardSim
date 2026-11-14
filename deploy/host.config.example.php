@@ -46,6 +46,18 @@ return [
     //         its own 0600 file, e.g. /home/USER/boardsim-secrets/boardsim.env).
     'secrets_file' => null,
 
+    // The value of the X-Origin-Secret header that Cloudflare's Transform Rule
+    // sets on every request. public/.htaccess is committed with the placeholder
+    // __CF_ORIGIN_SECRET__; this value is substituted into the built .htaccess,
+    // which is how the origin refuses traffic that did not come through
+    // Cloudflare without the secret ever reaching GitHub. Leave it empty and the
+    // build refuses to run. See requirements/12_CLOUDFLARE_ORIGIN_LOCK.md.
+    //
+    // 32-128 characters of A-Z a-z 0-9 _ or - (no regex metacharacters, because
+    // the value is compared inside a RewriteCond pattern). Generate one with:
+    //   php -r "echo bin2hex(random_bytes(32));"
+    'cloudflare_origin_secret' => '',
+
     // The database and user already created in cPanel → MySQL Databases.
     // cPanel prefixes both with the account username.
     'db' => [

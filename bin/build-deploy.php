@@ -22,8 +22,9 @@ declare(strict_types=1);
  * the host only ever receives files.
  *
  * The build refuses to run if the specification has drifted (manifest, content
- * bundle), if the SPA has not been built, or if the host config still contains a
- * placeholder — so a template build cannot reach a real server.
+ * bundle), if the SPA has not been built, if the host config still contains a
+ * placeholder, or if the Cloudflare origin secret is missing — so a template
+ * build cannot reach a real server.
  */
 
 require __DIR__ . '/../src/bootstrap.php';
@@ -32,6 +33,15 @@ use BoardSim\Content\BundleSeeder;
 use BoardSim\Content\OverlayLoader;
 use BoardSim\Content\PinnedScenarios;
 use BoardSim\Content\ScoringPolicyLoader;
+
+/**
+ * The placeholder in public/.htaccess that the build fills in.
+ *
+ * The committed .htaccess carries this instead of the Cloudflare origin secret,
+ * because this repository is public. deploy/host.config.php holds the value and a
+ * build without one is refused, so the guard can never ship half-configured.
+ */
+const ORIGIN_SECRET_PLACEHOLDER = '__CF_ORIGIN_SECRET__';
 
 $root = dirname(__DIR__);
 
@@ -96,6 +106,7 @@ $config['domain'] = rtrim((string) ($config['domain'] ?? ''), '/');
 $config['docroot'] = normalisePath((string) ($config['docroot'] ?? ''));
 $config['backend'] = normalisePath((string) ($config['backend'] ?? ''));
 $config['secrets_file'] = $config['secrets_file'] ?? null;
+$config['cloudflare_origin_secret'] = (string) ($config['cloudflare_origin_secret'] ?? '');
 $config['db'] = [
     'name' => (string) ($config['db']['name'] ?? ''),
     'user' => (string) ($config['db']['user'] ?? ''),
@@ -155,14 +166,74 @@ foreach (['src', 'content', 'engine', 'requirements', 'scenarios', 'migrations']
 copyFile($root . '/public/api/index.php', $backendOut . '/public/api/index.php');
 copyFile($root . '/deploy/backend.htaccess', $backendOut . '/.htaccess');
 
+// The backend tree is the source form of the application, so it carries its own
+// licence and attributions: whoever receives these files receives the terms that
+// cover them, which is what Apache-2.0 §4(a) and the MIT notice ask for. The
+// browser-facing copy is public/licences.txt.
+foreach (['LICENSE', 'THIRD-PARTY-NOTICES.md'] as $notice) {
+    copyFile($root . '/' . $notice, $backendOut . '/' . $notice);
+}
+
 foreach (['migrate.php', 'purge.php', 'verify-deploy.php'] as $script) {
     copyFile($root . '/bin/' . $script, $backendOut . '/bin/' . $script);
 }
 
 // ── Document root: the SPA, the routing rules and one shim ───────────────────
 copyTree($root . '/public/app', $docrootOut . '/app');
+
+// Error documents: static HTML in the site's own design, pointed at by
+// ErrorDocument in public/.htaccess. They are separate files rather than the SPA
+// because Apache answers 403/404/500 before the app exists — a missing asset or a
+// refused dotfile must still look like the product, and must still render when
+// PHP is the thing that failed.
+copyTree($root . '/public/errors', $docrootOut . '/errors');
+
 copyFile($root . '/public/.htaccess', $docrootOut . '/.htaccess');
 copyFile($root . '/deploy/api-index-shim.php', $docrootOut . '/api/index.php');
+
+// The licence obligation, served rather than shipped: the origin answers
+// /licences.txt with the attributions that apply to the bytes a browser downloads.
+copyFile($root . '/public/licences.txt', $docrootOut . '/licences.txt');
+
+// ── The Cloudflare origin lock: the one value the build injects ──────────────
+// public/.htaccess ships with a placeholder, so the secret exists only in
+// deploy/host.config.php (gitignored) and in this artefact. Both directions of a
+// mistake are silent without this check: a placeholder left in place makes
+// Apache refuse every request including Cloudflare's, and a missing rule lets the
+// origin answer anyone who resolves its address.
+$guardSource = (string) file_get_contents($docrootOut . '/.htaccess');
+
+if (!str_contains($guardSource, ORIGIN_SECRET_PLACEHOLDER)) {
+    fail([
+        'public/.htaccess has no ' . ORIGIN_SECRET_PLACEHOLDER . ' placeholder.',
+        'The Cloudflare origin lock is always on: restore the RewriteCond on',
+        'X-Origin-Secret in public/.htaccess (requirements/12_CLOUDFLARE_ORIGIN_LOCK.md).',
+    ]);
+}
+
+writeFile(
+    $docrootOut . '/.htaccess',
+    str_replace(ORIGIN_SECRET_PLACEHOLDER, $config['cloudflare_origin_secret'], $guardSource, $replaced)
+);
+
+$guard = (string) file_get_contents($docrootOut . '/.htaccess');
+
+// Exactly one substitution: the RewriteCond. A second occurrence would mean the
+// value has leaked into a comment, and none would mean the rule is gone.
+if ($replaced !== 1
+    || str_contains($guard, ORIGIN_SECRET_PLACEHOLDER)
+    || !str_contains($guard, 'RewriteCond %{HTTP:X-Origin-Secret} !^' . $config['cloudflare_origin_secret'] . '$')) {
+    fail([
+        'The Cloudflare origin lock did not survive substitution in docroot/.htaccess '
+            . "({$replaced} replacement(s), expected 1).",
+    ]);
+}
+
+// The cron-run verification on the host reaches the origin directly, so it has to
+// present the same header. Writing the value beside the code (outside the
+// document root) keeps it out of cron.txt, where a command line is visible to
+// every process on a shared host.
+writeFile($backendOut . '/cloudflare-origin.secret', $config['cloudflare_origin_secret'] . "\n");
 
 // Discovery files: served as plain static files from the document root, so a
 // crawler, a social-preview bot or a language model reads them without running
@@ -275,8 +346,13 @@ $cron = "# BoardSim cron entries — paste into cPanel → Cron Jobs.\n"
     . '  >> ' . $logDir . '/migrate.log 2>&1' . "\n"
     . $config['cron']['purge'] . '  ' . $config['php_binary'] . ' ' . $logDir . '/bin/purge.php'
     . '  >> ' . $logDir . '/purge.log 2>&1' . "\n"
+    // The origin answers only what Cloudflare forwarded, and this job runs on the
+    // host, so it goes straight to the origin and must present the header itself.
+    // The value is in a file rather than on this command line, which any process
+    // on a shared host can read.
     . $config['cron']['verify'] . ' ' . $config['php_binary'] . ' ' . $logDir . '/bin/verify-deploy.php'
     . ' --base=' . $config['domain'] . ' --require-ready'
+    . ' --origin-secret-file=' . $config['backend'] . '/cloudflare-origin.secret'
     . '  >> ' . $logDir . '/verify.log 2>&1' . "\n\n"
     . "# After the first successful deploy, change the migrate line to '0 2 * * *'.\n"
     . "# GET_LOCK('boardsim_migrate') makes overlapping runs no-op, so a tighter\n"
@@ -284,11 +360,15 @@ $cron = "# BoardSim cron entries — paste into cPanel → Cron Jobs.\n"
 
 writeFile($outRoot . '/cron.txt', $cron);
 
-$verify = "# Run from the repository root on this machine, after uploading.\n\n"
+$verify = "# Run from the repository root on this machine, after uploading.\n"
+    . "# --config supplies the origin AND the Cloudflare origin secret, so the\n"
+    . "# request is not refused with 403 by the lock in .htaccess.\n\n"
     . 'php bin/verify-deploy.php --config=' . str_replace('\\', '/', $options['config'])
     . ' --require-ready --expect-release=' . $release['tree_sha256'] . "\n\n"
-    . "# Or without the config file:\n"
-    . 'php bin/verify-deploy.php --base=' . $config['domain'] . ' --require-ready' . "\n";
+    . "# Or name the origin explicitly. Point --origin-secret-file at any file holding\n"
+    . "# the cloudflare_origin_secret from " . str_replace('\\', '/', $options['config']) . ":\n"
+    . '# php bin/verify-deploy.php --base=' . $config['domain']
+    . " --origin-secret-file=<file> --require-ready\n";
 
 writeFile($outRoot . '/verify.txt', $verify);
 
@@ -307,14 +387,21 @@ $readme = "BoardSim {$version} — deploy by copying files\n"
     . "   fill in the password.\n"
     . "4. File Manager: upload docroot-{$version}.zip (or docroot.zip) and extract it\n"
     . "   into {$config['docroot']}. It must end up holding .htaccess, app/, api/,\n"
-    . "   robots.txt, sitemap.xml and llms.txt — all six at that level, none inside\n"
-    . "   app/: robots.txt and sitemap.xml are only honoured at the origin root.\n"
+    . "   errors/, robots.txt, sitemap.xml, llms.txt and licences.txt — all of them at\n"
+    . "   that level, none inside app/: robots.txt and sitemap.xml are only honoured\n"
+    . "   at the origin root, and /errors/ is what ErrorDocument points at.\n"
+    . "   The .htaccess carries the Cloudflare origin lock: every request without\n"
+    . "   the X-Origin-Secret header answers 403. Add the Cloudflare Transform Rule\n"
+    . "   that sets it BEFORE this upload, or the site is locked out until you do.\n"
     . "5. Optional, for an instant schema: phpMyAdmin → SQL → paste install.sql.\n"
     . "6. cPanel → Cron Jobs: paste the lines from cron.txt.\n"
     . "7. Open https://{$config['domain']}/v1/health → status ok.\n"
     . "8. On this machine: see verify.txt.\n\n"
     . "Every later deploy is steps 2, 4 and 8. config.local.php and the database\n"
-    . "are never touched by an upload.\n";
+    . "are never touched by an upload.\n\n"
+    . "cloudflare-origin.secret (backend, mode 0600) holds the value cron presents to\n"
+    . "the locked origin. Rotating it means updating the Cloudflare rule and\n"
+    . "re-uploading .htaccess in the same window.\n";
 
 writeFile($outRoot . '/README.txt', $readme);
 
@@ -335,8 +422,29 @@ if ($options['zip']) {
     // with HTML, Google sees the homepage as 403, and every artefact-level test
     // still passes because the directory on this machine is complete.
     $required = [
-        'docroot.zip' => [$docrootOut, ['.htaccess', 'robots.txt', 'sitemap.xml', 'llms.txt', 'app/index.html', 'api/index.php']],
-        'backend.zip' => [$backendOut, ['.htaccess', 'src/bootstrap.php', 'bin/migrate.php']],
+        'docroot.zip' => [$docrootOut, [
+            '.htaccess',
+            'robots.txt',
+            'sitemap.xml',
+            'llms.txt',
+            'licences.txt',
+            'app/index.html',
+            'api/index.php',
+            'errors/error.css',
+            'errors/400.html',
+            'errors/403.html',
+            'errors/404.html',
+            'errors/500.html',
+            'errors/503.html',
+        ]],
+        'backend.zip' => [$backendOut, [
+            '.htaccess',
+            'LICENSE',
+            'THIRD-PARTY-NOTICES.md',
+            'src/bootstrap.php',
+            'bin/migrate.php',
+            'cloudflare-origin.secret',
+        ]],
     ];
 
     if ($config['layout'] === 'split') {
@@ -400,9 +508,13 @@ printf("  README.txt               -> the same steps, with these paths\n\n");
 
 printf("  release  %s  (%s, %s)\n", $version, $pinned->contentVersion(), (string) $policy['ruleset_version']);
 printf("  tree     %s\n", $release['tree_sha256']);
-printf("  pointer  %s\n\n", $config['layout'] === 'split'
+printf("  pointer  %s\n", $config['layout'] === 'split'
     ? $docrootOut . '/api/backend.php -> ' . $config['backend']
     : 'none (docroot is the backend public/ directory)');
+printf(
+    "  origin   X-Origin-Secret lock armed (%d chars, not printed)\n\n",
+    strlen($config['cloudflare_origin_secret'])
+);
 
 foreach ($zips as $name => $method) {
     printf("  %-12s %s\n", $name, $method);
@@ -465,6 +577,23 @@ function validateConfig(array $config): array
 
     if (str_contains($config['domain'], 'example')) {
         $problems[] = "domain is still a placeholder: {$config['domain']}";
+    }
+
+    // The Cloudflare origin lock is always on (requirements/12_CLOUDFLARE_ORIGIN_LOCK.md),
+    // so a build without a usable secret has nowhere to go: baking the placeholder
+    // into .htaccess would make Apache refuse every request, Cloudflare's included,
+    // and dropping the rule would leave the origin open with nothing failing. The
+    // character set is narrow on purpose, so the value needs no escaping inside the
+    // RewriteCond pattern.
+    $originSecret = $config['cloudflare_origin_secret'];
+
+    if ($originSecret === '') {
+        $problems[] = 'cloudflare_origin_secret is empty: set it in deploy/host.config.php';
+    } elseif (preg_match('/^[A-Za-z0-9_-]{32,128}$/', $originSecret) !== 1) {
+        $problems[] = 'cloudflare_origin_secret must be 32-128 characters of A-Z a-z 0-9 _ or -'
+            . ' (no regex metacharacters). Generate one with: php -r "echo bin2hex(random_bytes(32));"';
+    } elseif (preg_match('/(?:CHANGEME|YOUR|EXAMPLE)/i', $originSecret) === 1) {
+        $problems[] = 'cloudflare_origin_secret still looks like a placeholder.';
     }
 
     if (str_contains($config['db']['name'], 'USER_') || str_contains($config['db']['user'], 'USER_')) {
