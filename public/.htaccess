@@ -6,6 +6,45 @@
 <IfModule mod_rewrite.c>
   RewriteEngine On
 
+  # --- Let's Encrypt / AutoSSL validation: the only exemption -----------------
+  # An ACME HTTP-01 challenge is fetched by the certificate authority from the
+  # origin address, not through Cloudflare, so it can never carry
+  # X-Origin-Secret. These two paths are therefore exempt from the lock below,
+  # and they hold nothing but single-use challenge tokens:
+  #
+  #   /.well-known/acme-challenge/<token>   Let's Encrypt, certbot, acme.sh
+  #   /.well-known/pki-validation/<file>    cPanel AutoSSL / Sectigo DCV
+  #   /pki-validation/<file>                older cPanel DCV layout
+  #
+  # [L] stops this ruleset, so the real file is served — and a missing token is
+  # a 404 from Apache instead of the SPA shell answering 200 to a CA. Exempting
+  # a directory that can hold an uploaded file would be a hole; this one is
+  # written by AutoSSL from the account's own cron, and certbot writes only the
+  # challenge it is waiting for.
+  RewriteRule ^\.well-known(/|$) - [L]
+  RewriteRule ^pki-validation(/|$) - [L]
+
+  # --- Cloudflare origin lock (always on) -----------------------------------
+  # requirements/12_CLOUDFLARE_ORIGIN_LOCK.md
+  #
+  # This origin answers only traffic that Cloudflare forwarded. A Cloudflare
+  # Transform Rule sets X-Origin-Secret on every request with "Set static", so a
+  # client can neither supply, append nor remove the value, and this rule refuses
+  # everything else with 403.
+  #
+  # First rule in the file on purpose: a request that did not come through
+  # Cloudflare must not reach /v1, a static file or the SPA shell, and no later
+  # rewrite may answer it 200.
+  #
+  # The value below is written by the build, never by hand: the copy of this file
+  # in the repository carries a placeholder, which bin/build-deploy.php replaces
+  # from deploy/host.config.php (gitignored) and fails the build if it cannot. So
+  # the value never reaches the repository, and a deployment cannot silently ship
+  # without the guard. Never hand-edit the deployed copy: the next build overwrites
+  # .htaccess and the value would diverge from Cloudflare's.
+  RewriteCond %{HTTP:X-Origin-Secret} !^__CF_ORIGIN_SECRET__$
+  RewriteRule ^ - [F,L]
+
   # API first, so /v1 is never captured by the SPA fallback.
   #
   # A per-directory rewrite re-enters this ruleset, so when api/index.php is not
@@ -54,6 +93,21 @@
   RewriteRule ^ app/index.html [L]
 </IfModule>
 
+# --- Error documents --------------------------------------------------------
+# Static pages in the site's own design, so a 403 or a missing asset does not
+# fall back to Apache's default grey page. They are served with the real status
+# code (ErrorDocument keeps it), and they are plain HTML + one stylesheet: the
+# Content-Security-Policy below forbids inline style and script, so nothing may
+# be inlined. docs/error-pages.md explains what may change here.
+#
+# 503 is also the answer of the api/index.php guard above, which is the one place
+# this origin fails loudly instead of serving the SPA shell for an API path.
+ErrorDocument 400 /errors/400.html
+ErrorDocument 403 /errors/403.html
+ErrorDocument 404 /errors/404.html
+ErrorDocument 500 /errors/500.html
+ErrorDocument 503 /errors/503.html
+
 # Never serve dotfiles.
 <FilesMatch "^\.">
   Require all denied
@@ -85,8 +139,19 @@
   <FilesMatch "^(robots\.txt|llms\.txt|sitemap\.xml)$">
     Header set Cache-Control "public, max-age=3600"
   </FilesMatch>
+  # The error pages and their stylesheet are not hashed, and a stale 403 is worse
+  # than no 403: never let a browser reuse one across a deploy.
+  <FilesMatch "^(400|403|404|500|503)\.html$|^error\.css$">
+    Header set Cache-Control "no-store"
+  </FilesMatch>
   <Files "llms.txt">
     Header set Content-Type "text/plain; charset=utf-8"
+  </Files>
+  # Served for the licence obligation: Apache must not guess the type of a file
+  # whose only job is to be readable.
+  <Files "licences.txt">
+    Header set Content-Type "text/plain; charset=utf-8"
+    Header set Cache-Control "public, max-age=3600"
   </Files>
 </IfModule>
 

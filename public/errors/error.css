@@ -1,0 +1,157 @@
+/* BoardSim error documents — the site's own design, in one file.
+ *
+ * Why a separate stylesheet rather than the SPA bundle: the built bundle's asset
+ * names are content-hashed (app/assets/index-<hash>.css), so a static page cannot
+ * name it, and bin/verify-http.php refuses anything that would let the policy
+ * drift. Tokens are copied verbatim from web/src/styles.css and
+ * web/src/components.css so the pages look like the product. No @import, no web
+ * font, no inline style attribute: public/.htaccess sends
+ * `default-src 'self'; style-src 'self'; style-src-attr 'none'` to every file,
+ * so an inline attribute would simply be dropped by the browser.
+ */
+
+:root {
+  color-scheme: light;
+  --color-ink: #142b3b;
+  --color-heading: #102a3a;
+  --color-muted: #526675;
+  --color-paper: #ffffff;
+  --color-canvas: #f3f7f8;
+  --color-border: #dce6e9;
+  --color-accent: #087e83;
+  --color-accent-strong: #075e65;
+  --color-accent-soft: #e7f4f2;
+  --color-focus: #8a4b00;
+  --color-rule-green: #a8d5cd;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+  --space-9: 5rem;
+
+  --content-width: 70rem;
+  --reading-width: 46rem;
+  --page-gutter: 1.5rem;
+  --radius-control: 0.25rem;
+  --radius-card: 0.25rem;
+
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "Cascadia Mono", "Segoe UI Mono", Menlo, Consolas, monospace;
+
+  --focus-outline: 3px solid var(--color-focus);
+  --focus-offset: 3px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1 { color: var(--color-heading); line-height: 1.25; margin: 0 0 var(--space-3); font-size: clamp(1.75rem, 4vw, 2.5rem); }
+p { margin: 0 0 var(--space-3); }
+a { color: var(--color-accent-strong); text-underline-offset: 0.15em; }
+a:hover { color: var(--color-accent); }
+:focus-visible { outline: var(--focus-outline); outline-offset: var(--focus-offset); }
+code { font-family: var(--font-mono); font-size: 0.875rem; }
+
+.bs-container, .bs-header__inner, .bs-footer__inner {
+  width: min(var(--content-width), calc(100% - 2 * var(--page-gutter)));
+  margin-inline: auto;
+}
+
+/* Header — same 82px bar and 42px mark as the application shell. */
+.bs-header { border-bottom: 1px solid var(--color-border); background: var(--color-paper); }
+.bs-header__inner { display: flex; min-height: 82px; align-items: center; }
+.bs-brand { display: inline-flex; align-items: center; gap: var(--space-3); color: var(--color-ink); text-decoration: none; }
+.bs-brand__mark { display: block; flex: none; width: 42px; height: 42px; }
+.bs-brand__name { display: grid; gap: var(--space-1); font-weight: 700; line-height: 1.2; }
+.bs-brand__tagline { color: var(--color-muted); font-size: 0.72rem; font-weight: 500; letter-spacing: 0.07em; }
+
+/* Hero on canvas — one column, because an error page has one thing to say. */
+.bs-hero { background: var(--color-canvas); border-bottom: 1px solid var(--color-border); }
+.bs-hero__inner {
+  width: min(var(--content-width), calc(100% - 2 * var(--page-gutter)));
+  margin-inline: auto;
+  padding-block: var(--space-8) var(--space-7);
+  display: grid;
+  gap: var(--space-5);
+  grid-template-columns: minmax(0, 1fr);
+}
+.bs-eyebrow {
+  margin: 0 0 var(--space-2); color: var(--color-accent-strong);
+  font-size: 0.75rem; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase;
+}
+.bs-hero__copy { max-width: var(--reading-width); margin: var(--space-4) 0 0; color: var(--color-muted); font-size: 1.0625rem; }
+.bs-hero__actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-5); }
+
+/* Buttons — 46px minimum, as in the application. */
+.bs-button {
+  display: inline-flex; min-height: 46px; align-items: center; justify-content: center;
+  padding: var(--space-3) var(--space-4); border: 1px solid var(--color-accent-strong);
+  border-radius: var(--radius-control); background: var(--color-accent-strong);
+  color: var(--color-paper); font: inherit; font-weight: 650; text-decoration: none; cursor: pointer;
+}
+.bs-button:hover { background: #03484d; color: var(--color-paper); }
+.bs-button--secondary { background: transparent; color: var(--color-accent-strong); }
+.bs-button--secondary:hover { background: var(--color-accent-soft); color: var(--color-accent-strong); }
+
+/* A quiet panel for the "what to do next" list. */
+.bs-card {
+  max-width: var(--reading-width); padding: var(--space-5);
+  border: 1px solid var(--color-border); border-radius: var(--radius-card);
+  background: var(--color-paper);
+}
+.bs-card h2 { margin: 0 0 var(--space-2); color: var(--color-heading); font-size: 1.125rem; }
+.bs-card ul { margin: 0; padding-left: var(--space-5); color: var(--color-muted); }
+.bs-card li { margin-bottom: var(--space-2); }
+.bs-card :last-child { margin-bottom: 0; }
+
+/* Footer — the site's byline rule, minus the live policy pins the SPA fetches. */
+.bs-footer {
+  margin-top: var(--space-9); padding: var(--space-6) 0;
+  border-top: 1px solid var(--color-rule-green); background: var(--color-paper);
+}
+.bs-footer__inner {
+  display: flex; flex-wrap: wrap; align-items: flex-start;
+  justify-content: space-between; gap: var(--space-4) var(--space-6);
+}
+.bs-footer__legal { margin: 0; color: var(--color-muted); font-size: 0.8125rem; max-width: 32rem; }
+.bs-footer__meta { display: grid; gap: var(--space-2); justify-items: end; text-align: right; }
+.bs-byline {
+  display: flex; flex-wrap: wrap; align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+  margin: 0; color: var(--color-heading); font-size: 0.8125rem; font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.bs-byline a {
+  color: var(--color-accent-strong); font-weight: 650; text-decoration: none;
+  border-bottom: 1px solid var(--color-rule-green);
+}
+.bs-byline a:hover, .bs-byline a:focus-visible { color: var(--color-accent); border-bottom-color: var(--color-accent); }
+.bs-byline__dot { color: var(--color-rule-green); }
+.bs-byline__role { color: var(--color-muted); font-weight: 500; }
+
+@media (max-width: 47.5rem) {
+  .bs-footer__meta { justify-items: start; text-align: left; }
+  .bs-byline { justify-content: flex-start; }
+  .bs-hero__inner, .bs-header__inner, .bs-footer__inner, .bs-container {
+    width: min(100% - 1.5rem, var(--content-width));
+  }
+}
+
+@media print {
+  .bs-header, .bs-footer, .bs-hero__actions { display: none; }
+}
+

@@ -17,11 +17,19 @@ Two facts shape what belongs here:
 The compiled SPA embeds the React runtime. These are MIT-licensed and are included
 with their copyright notice preserved:
 
-| Component | Version | License |
-| --- | --- | --- |
-| react | 18.3.1 | MIT |
-| react-dom | 18.3.1 | MIT |
-| scheduler | 0.23.2 | MIT |
+| Component | Version | License | Copyright |
+| --- | --- | --- | --- |
+| react | 18.3.1 | MIT | Meta Platforms, Inc. and affiliates |
+| react-dom | 18.3.1 | MIT | Meta Platforms, Inc. and affiliates |
+| scheduler | 0.23.2 | MIT | Meta Platforms, Inc. and affiliates |
+| loose-envify | 1.4.0 | MIT | Andres Suarez |
+| js-tokens | 4.0.0 | MIT | Simon Lydell |
+
+`loose-envify` and `js-tokens` are the CommonJS `process.env` indirection React's
+package metadata pulls in; depending on which entry point Rollup resolves, one or
+both may be tree-shaken out of the bundle. They are listed because the lockfile
+resolves them as production dependencies, and an attribution list that is
+sometimes short is worse than one that is occasionally generous.
 
 React is © Meta Platforms, Inc. and affiliates, used under the MIT License. The
 standard MIT terms are reproduced below for the distributed React runtime:
@@ -58,10 +66,10 @@ rather than as redistributed code. Notable non-MIT licenses are called out.
 
 | Package | Version | License |
 | --- | --- | --- |
-| vite | 5.4.21 | MIT |
+| vite | 6.4.6 | MIT |
 | @vitejs/plugin-react | 4.7.0 | MIT |
 | typescript | 5.9.3 | Apache-2.0 |
-| esbuild | 0.21.5 | MIT |
+| esbuild | 0.25.12 | MIT |
 | rollup | 4.68.2 | MIT |
 | @babel/core and other @babel/* | 7.29.x | MIT |
 | postcss | 8.5.32 | MIT |
@@ -97,3 +105,17 @@ A `NOTICE` file is deliberately **not** included: Apache-2.0 requires one only
 when redistributing code that already carries a `NOTICE`, and none of the
 third-party components here (all MIT/ISC/BSD/CC or build-only Apache-2.0 tooling)
 ships one. If a future dependency does carry a `NOTICE`, add it alongside this file.
+
+## 5. Where a browser receives these notices
+
+`LICENSE` and this file travel with the source, which a browser never sees. The
+origin therefore also serves `public/licences.txt` at `/licences.txt`: the same
+attributions and the same MIT text, in plain text, with the Apache-2.0 statement
+for BoardSim itself. `bin/build-deploy.php` copies it into the document root,
+`public/.htaccess` states its type, and the site footer and every error page link
+to it.
+
+The bundled JavaScript carries its own copy as well: Vite preserves legal
+comments, so the served `app/assets/index-<hash>.js` still contains
+`@license React … Copyright (c) Facebook, Inc. and its affiliates`, which is the
+MIT notice travelling with the code it covers.

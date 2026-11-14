@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Verify that the 28 SHA-256 pinned specification files are unmodified.
+ * Verify that the 30 SHA-256 pinned specification files are unmodified.
  *
  * SHA256_MANIFEST.md lists the requirement files with a path relative to
  * requirements/, while engine/ and scenarios/ entries are relative to the

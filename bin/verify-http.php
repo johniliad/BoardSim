@@ -332,6 +332,78 @@ assertThat(
     str_contains($htaccess, 'RewriteCond %{REQUEST_URI} !^/v1(/|$)')
 );
 
+// The Cloudflare origin lock is always on (requirements/12_CLOUDFLARE_ORIGIN_LOCK.md).
+// Asserted as text, because the failure is silent in the worst direction: with the
+// rule gone the site works perfectly for everyone, including a client that
+// resolved the origin address and skipped Cloudflare entirely. The value itself is
+// a placeholder here — bin/build-deploy.php substitutes the real one and refuses
+// to build without it, which is the only reason a secret can live in .htaccess.
+$originGuard = strpos($htaccess, 'RewriteCond %{HTTP:X-Origin-Secret} !^__CF_ORIGIN_SECRET__$');
+$apiRoute = strpos($htaccess, 'RewriteRule ^v1(/.*)?$ api/index.php');
+
+assertThat('the origin refuses traffic that did not come through Cloudflare', $originGuard !== false);
+assertThat(
+    'the origin lock is the first rewrite rule, before the API route',
+    $originGuard !== false && $apiRoute !== false && $originGuard < $apiRoute
+);
+assertThat('the origin lock denies with 403', $originGuard !== false
+    && str_contains($htaccess, 'RewriteRule ^ - [F,L]'));
+
+// Let's Encrypt and cPanel AutoSSL fetch the challenge from the origin address,
+// never through Cloudflare, so the CA cannot present the header. The exemption is
+// therefore load-bearing for certificate renewal — and it must come BEFORE the
+// lock, or it exempts nothing.
+$acmeExemption = strpos($htaccess, 'RewriteRule ^\\.well-known(/|$) - [L]');
+
+assertThat(
+    'the ACME validation path is exempt from the origin lock',
+    $acmeExemption !== false && str_contains($htaccess, 'RewriteRule ^pki-validation(/|$) - [L]')
+);
+assertThat(
+    'the ACME exemption is evaluated before the lock',
+    $acmeExemption !== false && $originGuard !== false && $acmeExemption < $originGuard
+);
+
+// Branded error documents: Apache's default page is the one screen that never
+// looked like this product, and it is the screen an operator sees first when a
+// deploy is wrong.
+foreach (['400', '403', '404', '500', '503'] as $status) {
+    assertThat(
+        "the {$status} error document is branded and installed",
+        str_contains($htaccess, "ErrorDocument {$status} /errors/{$status}.html")
+        && is_file($root . "/public/errors/{$status}.html")
+    );
+}
+
+assertThat(
+    'the error pages are styled by one shipped stylesheet',
+    is_file($root . '/public/errors/error.css')
+    && str_contains((string) file_get_contents($root . '/public/errors/404.html'), '/errors/error.css')
+);
+assertThat(
+    'no error page inlines style or script, which the CSP would refuse',
+    (static function () use ($root): bool {
+        foreach (glob($root . '/public/errors/*.html') ?: [] as $page) {
+            $html = (string) file_get_contents($page);
+
+            if (str_contains($html, 'style=') || str_contains($html, '<script')) {
+                return false;
+            }
+        }
+
+        return true;
+    })()
+);
+
+// The licence the site itself serves: Apache-2.0 for the code a browser downloads,
+// plus the MIT notice that travels inside the bundle.
+assertThat(
+    'the served licence file carries both notices',
+    is_file($root . '/public/licences.txt')
+    && str_contains((string) file_get_contents($root . '/public/licences.txt'), 'Apache License')
+    && str_contains((string) file_get_contents($root . '/public/licences.txt'), 'MIT License')
+);
+
 printf("\n== Erasure over HTTP ==\n");
 
 $victim = expect(

@@ -29,6 +29,11 @@ Prerequisite modules (`.htaccess` depends on them): `mod_rewrite`, `mod_headers`
 `AllowOverride All` for the vhost, and PHP `pdo_mysql`. No `SetEnv` is required —
 credentials resolution does not depend on server configuration.
 
+The origin is expected to sit behind Cloudflare, and the document root's
+`.htaccess` refuses every request that Cloudflare did not forward (see
+[`requirements/12_CLOUDFLARE_ORIGIN_LOCK.md`](requirements/12_CLOUDFLARE_ORIGIN_LOCK.md)).
+That is why section 2 needs a secret before it can build.
+
 ## 2. Build the SPA and install the web tree
 
 Clone the repository to `~/boardsim-secrets/backend/`, then build the SPA inside it:
@@ -54,13 +59,25 @@ so nothing is missed:
 ```bash
 php bin/build-deploy.php --version=1.2.0     # writes build/deploy/<version>/
 # .../docroot/app/             the built SPA, with the metadata in its shell
-# .../docroot/.htaccess        routing, security headers, dotfile denial
+# .../docroot/.htaccess        Cloudflare origin lock, routing, error documents,
+#                              security headers, dotfile denial
 # .../docroot/api/index.php    the shim
 # .../docroot/api/backend.php  the pointer to the backend
+# .../docroot/errors/          branded 400/403/404/500/503 pages (ErrorDocument)
 # .../docroot/robots.txt       crawler policy, points at the sitemap
 # .../docroot/sitemap.xml      the one canonical URL, lastmod stamped at build
 # .../docroot/llms.txt         what the product is, its API and its limits
+# .../docroot/licences.txt     Apache-2.0 and the React MIT notice, for browsers
 ```
+
+The build also needs `cloudflare_origin_secret` in `deploy/host.config.php`. The
+committed `public/.htaccess` carries the placeholder `__CF_ORIGIN_SECRET__`, which
+the build substitutes so the origin answers **only** traffic that Cloudflare
+forwarded; a build without a usable value is refused rather than shipped. The
+value never reaches this repository — see
+[`requirements/12_CLOUDFLARE_ORIGIN_LOCK.md`](requirements/12_CLOUDFLARE_ORIGIN_LOCK.md).
+Create the Cloudflare Transform Rule that sets `X-Origin-Secret` **before** the
+first upload of a locking `.htaccess`, or the site answers 403 to everyone.
 
 The three discovery files must sit at the **origin root**, not inside `app/`:
 `robots.txt` and `sitemap.xml` are only honoured there, and `llms.txt` is read at
@@ -90,9 +107,13 @@ announces itself instead of impersonating a policy file.
 After the upload, verify the **origin**, not the artefact:
 
 ```bash
-php bin/verify-deploy.php --base=https://boardsim.iliadis.net --require-ready
+php bin/verify-deploy.php --config=deploy/host.config.php --require-ready
 ```
 
+`--config` also supplies the Cloudflare origin secret, so the check presents
+`X-Origin-Secret` and is not refused by the lock it is supposed to verify. It
+asserts the lock separately: one request without the header must answer `403`,
+which is the only way to see that the origin is not answering the world directly.
 `deploy/smoke-router.php` proves the files; only that command proves the server.
 It fails on a 403 at `/`, on any discovery file answered by the SPA fallback, and
 on a served shell that is not byte-for-byte the one this checkout built — the

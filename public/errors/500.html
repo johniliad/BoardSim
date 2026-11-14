@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Server error — BoardSim</title>
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#075e65" />
+    <link rel="icon" href="/app/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/errors/error.css" />
+  </head>
+  <body>
+    <header class="bs-header">
+      <div class="bs-header__inner">
+        <a class="bs-brand" href="/">
+          <img class="bs-brand__mark" src="/app/boardsim-mark.svg" alt="" width="42" height="42" aria-hidden="true" />
+          <span class="bs-brand__name">
+            BoardSim
+            <span class="bs-brand__tagline">Executive decision-making under pressure</span>
+          </span>
+        </a>
+      </div>
+    </header>
+
+    <main id="main" class="bs-hero">
+      <div class="bs-hero__inner">
+        <div>
+          <p class="bs-eyebrow">Error 500</p>
+          <h1>The request did not complete</h1>
+          <p class="bs-hero__copy">
+            Something failed on the server and the request stopped. This page is served as a
+            static file, so it works even when the application behind it does not. A decision that
+            reached this state was not scored.
+          </p>
+          <div class="bs-hero__actions">
+            <a class="bs-button" href="/">Back to BoardSim</a>
+            <a class="bs-button bs-button--secondary" href="/#/methodology">How scoring works</a>
+          </div>
+        </div>
+
+        <div class="bs-card">
+          <h2>What to try</h2>
+          <ul>
+            <li>Retry once: a deploy in progress can answer this for a few seconds.</li>
+            <li>If it repeats, <code>/v1/health</code> reports which part of the deployment is degraded, without needing this interface.</li>
+            <li>Your last completed run is stored server-side; reloading the home page shows what is available.</li>
+          </ul>
+        </div>
+      </div>
+    </main>
+
+    <footer class="bs-footer">
+      <div class="bs-footer__inner">
+        <p class="bs-footer__legal">
+          BoardSim is a simulated executive decision-making self-development aid. Its fictional
+          cases, invented weights and authored options have not been validated as a psychometric,
+          hiring or regulatory-compliance instrument.
+        </p>
+        <div class="bs-footer__meta">
+          <p class="bs-byline">
+            <span>Built by</span>
+            <a href="https://www.iliadis.net/#john-iliadis" rel="author">Dr. John Iliadis</a>
+            <span class="bs-byline__dot" aria-hidden="true">·</span>
+            <span class="bs-byline__role">Cybersecurity Executive Decision Simulator</span>
+            <span class="bs-byline__dot" aria-hidden="true">·</span>
+            <a href="/licences.txt">Licences</a>
+          </p>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

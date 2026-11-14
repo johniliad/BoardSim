@@ -55,6 +55,17 @@ Two details worth keeping in mind:
 `bin/verify-contrast.php` measures the tokens that replaced the inline values, so
 the closure is checked rather than announced.
 
+## The one request header this origin requires
+
+Everything above is a **response** header. The origin also demands one request
+header, `X-Origin-Secret`, and refuses with `403` when it is absent — that is the
+Cloudflare origin lock, not a security header in the browser sense, and it lives in
+the same file as the first rewrite rule. It is documented separately because the
+secret has to stay out of the repository:
+[`requirements/12_CLOUDFLARE_ORIGIN_LOCK.md`](../requirements/12_CLOUDFLARE_ORIGIN_LOCK.md).
+`bin/verify-http.php` asserts the rule is present, is first, and still carries the
+build placeholder rather than a committed value.
+
 ## What is not verified
 
 The Apache `.htaccess` directives are **not** exercised by any test here. PHP's

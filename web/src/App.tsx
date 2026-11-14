@@ -177,6 +177,13 @@ export default function App() {
               <span className="bs-byline__dot" aria-hidden="true">
                 ·
               </span>
+              {/* The licence reaches the browser as a served file, not as a repo
+                  link: what a visitor downloads is the object form of React and
+                  this application, so the notice has to travel with it. */}
+              <a href="/licences.txt">Licences and attributions</a>
+              <span className="bs-byline__dot" aria-hidden="true">
+                ·
+              </span>
               <span className="bs-byline__role">build {__BUILD_DATE__}</span>
             </p>
             <p>

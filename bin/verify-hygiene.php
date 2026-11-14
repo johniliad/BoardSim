@@ -119,7 +119,7 @@ if ($gitStatus !== 0) {
         '#^deploy/host\.config\.php$#',
         '#(^|/)config\.local\.php$#',
         '#(^|/)\.env(\.(?!example$)[A-Za-z0-9]+)?$#',
-        '#\.(zip|tar|tar\.gz|tgz|p12|pem|key|crt|pfx|jks|sqlite|sqlite3|db|log)$#',
+        '#\.(zip|tar|tar\.gz|tgz|p12|pem|key|crt|pfx|jks|sqlite|sqlite3|db|log|secret)$#',
         '#\.sql\.(gz|zip)$#',
         '#(^|/)\.(idea|vscode|claude|cursor|windsurf|specstory|history|roo)/#',
         '#\.DS_Store$#',
