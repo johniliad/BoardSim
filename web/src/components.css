@@ -10,9 +10,10 @@
 .bs-brand__mark { display: block; flex: none; width: 42px; height: 42px; }
 .bs-brand__name { display: grid; gap: var(--space-1); font-weight: 700; line-height: 1.2; }
 .bs-brand__tagline { color: var(--color-muted); font-size: 0.72rem; font-weight: 500; letter-spacing: 0.07em; }
-/* The full lockup on the homepage: intrinsic 320x88, so the width/height
-   attributes keep the space reserved and nothing jumps while it loads. */
-.bs-brand-lockup { display: block; width: min(320px, 76vw); height: auto; margin: 0 0 var(--space-4); }
+/* The explainer image on the homepage: the 3:2 boardsim2 render, declared
+   600x400 so the width/height attributes keep the space reserved and nothing
+   jumps while it loads. The SVG lockup it replaced stays a brand asset. */
+.bs-hero-image { display: block; width: min(600px, 100%); height: auto; margin: 0 0 var(--space-4); border-radius: var(--radius-image); }
 .bs-nav { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); }
 .bs-nav a {
   display: inline-flex; min-height: 44px; align-items: center;

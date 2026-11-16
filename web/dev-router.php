@@ -20,10 +20,17 @@ declare(strict_types=1);
  */
 require_once __DIR__ . '/../src/bootstrap.php';
 
+use BoardSim\Http\CookiePolicy;
 use BoardSim\Http\SecurityHeaders;
 
 $documentRoot = realpath(__DIR__ . '/../public');
 $path = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH);
+
+// The policy is emitted before anything answers, so every response this
+// router produces — the dotfile 403 below, the API, streamed static files,
+// the SPA fallback and the "not built yet" 503 — carries it.
+CookiePolicy::harden();
+SecurityHeaders::emit(SecurityHeaders::forStatic());
 
 // Mirrors public/.htaccess: a dotfile is never served.
 if (preg_match('#(?:^|/)\.#', $path) === 1) {
@@ -33,8 +40,6 @@ if (preg_match('#(?:^|/)\.#', $path) === 1) {
 
     return true;
 }
-
-SecurityHeaders::emit(SecurityHeaders::forStatic(SecurityHeaders::requestIsHttps()));
 
 if (str_starts_with($path, '/v1')) {
     require __DIR__ . '/../public/api/index.php';

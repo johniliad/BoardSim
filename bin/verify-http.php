@@ -18,6 +18,11 @@ use BoardSim\Domain\Run\InMemoryRunStore;
 use BoardSim\Domain\Run\RunService;
 use BoardSim\Http\ApiRouter;
 
+// Pinned before any output, exactly as the HTTP entry points pin it: PHP
+// refuses session ini changes once output has started, which is why the
+// entry-point position is part of the contract asserted below.
+\BoardSim\Http\CookiePolicy::harden();
+
 $passed = 0;
 $failed = 0;
 
@@ -54,6 +59,63 @@ function assertThat(string $label, bool $condition, string $detail = ''): void
 
     $failed++;
     printf("  FAIL  %s%s\n", $label, $detail === '' ? '' : " ({$detail})");
+}
+
+/**
+ * Every script and stylesheet a document references must carry an integrity
+ * attribute matching the sha384 digest of the bytes actually served — ZAP
+ * flags an unpinned script or stylesheet ("Sub Resource Integrity Attribute
+ * Missing"), and a stale pin breaks the page in the browser instead, so the
+ * digest is recomputed here from disk rather than trusted.
+ *
+ * @param list<string> $documents
+ */
+function assertSubresourceIntegrity(string $label, array $documents, string $assetBase): void
+{
+    $tags = [];
+
+    foreach ($documents as $document) {
+        if (preg_match_all('#<script\b[^>]*\bsrc="[^"]*"[^>]*>#', $document, $scripts) === 1) {
+            foreach ($scripts[0] as $tag) {
+                $tags[] = [$label, $tag];
+            }
+        }
+
+        if (preg_match_all('#<link\b[^>]*\brel="stylesheet"[^>]*>#', $document, $styles) === 1) {
+            foreach ($styles[0] as $tag) {
+                $tags[] = [$label, $tag];
+            }
+        }
+    }
+
+    if ($tags === []) {
+        assertThat($label . ' reference at least one script or stylesheet', false);
+
+        return;
+    }
+
+    foreach ($tags as [$documentLabel, $tag]) {
+        preg_match('#\b(?:src|href)="([^"]+)"#', $tag, $url);
+        $reference = (string) ($url[1] ?? '');
+
+        if (!str_starts_with($reference, '/')) {
+            assertThat(sprintf('%s: %s is same-origin', $documentLabel, $reference), false);
+
+            continue;
+        }
+
+        $file = rtrim($assetBase, '/') . $reference;
+        $digest = is_file($file)
+            ? 'sha384-' . base64_encode((string) hash('sha384', (string) file_get_contents($file), true))
+            : null;
+        preg_match('#integrity="([^"]+)"#', $tag, $pin);
+
+        assertThat(
+            sprintf('%s pins %s', $documentLabel, $reference),
+            $digest !== null && isset($pin[1]) && $pin[1] === $digest,
+            isset($pin[1]) ? 'stale digest' : 'no integrity attribute'
+        );
+    }
 }
 
 $root = dirname(__DIR__);
@@ -276,13 +338,19 @@ expect('demo decide with an unknown stage', $router->handle('POST', '/v1/demo/de
 
 printf("\n== Security headers ==\n");
 
-$headers = \BoardSim\Http\SecurityHeaders::forApi(false);
+$headers = \BoardSim\Http\SecurityHeaders::forApi();
 $csp = (string) $headers['Content-Security-Policy'];
 
 assertThat('a content security policy is sent', $csp !== '');
+assertThat('the policy denies by default', str_contains($csp, "default-src 'self'"));
 assertThat('scripts may not be inlined', str_contains($csp, "script-src 'self'") && !str_contains($csp, "script-src 'self' 'unsafe-inline'"));
 assertThat('eval is not permitted', !str_contains($csp, 'unsafe-eval'));
 assertThat('plugins and objects are blocked', str_contains($csp, "object-src 'none'"));
+
+// base-uri, form-action and frame-ancestors have no fallback to default-src,
+// so each is asserted on its own: a policy that omits one is read as allowing
+// anything for it, which is what ZAP's "CSP: Failure to Define Directive with
+// No Fallback" (10055-13) measures.
 assertThat('the base tag cannot be hijacked', str_contains($csp, "base-uri 'none'"));
 assertThat('forms cannot post off-origin', str_contains($csp, "form-action 'self'"));
 assertThat('the page cannot be framed', str_contains($csp, "frame-ancestors 'none'"));
@@ -290,19 +358,25 @@ assertThat('legacy framing is also blocked', $headers['X-Frame-Options'] === 'DE
 assertThat('inline scripts are refused', str_contains($csp, "script-src 'self'") && !str_contains($csp, 'unsafe-inline'));
 assertThat('inline style attributes are refused', str_contains($csp, "style-src 'self'") && str_contains($csp, "style-src-attr 'none'"));
 assertThat('participant data is never cached', $headers['Cache-Control'] === 'no-store');
-assertThat('HSTS is withheld over plain http', !isset($headers['Strict-Transport-Security']));
+
+// The origin states same-origin isolation explicitly instead of relying on
+// the absence of a CORS header (ZAP 10098: cross-domain misconfiguration).
+assertThat('cross-origin reads of origin resources are refused', $headers['Cross-Origin-Resource-Policy'] === 'same-origin');
+assertThat('cross-origin window access is refused', $headers['Cross-Origin-Opener-Policy'] === 'same-origin');
+assertThat('no CORS header loosens the same-origin policy', !preg_grep('/^Access-Control/i', array_keys($headers)));
+
+// HSTS on every response, http or https alike: a browser ignores the header
+// over plain HTTP (RFC 6797), so unconditional emission cannot lock an origin
+// out of anything — and behind a TLS-terminating proxy the origin may see
+// plain HTTP even though the browser sees HTTPS, which is exactly how the /v1
+// responses used to go out without the header.
+$hsts = (string) ($headers['Strict-Transport-Security'] ?? '');
+assertThat('HSTS is sent on every response', str_contains($hsts, 'max-age=31536000') && str_contains($hsts, 'includeSubDomains'), $hsts ?: 'absent');
+
+$staticHeaders = \BoardSim\Http\SecurityHeaders::forStatic();
 assertThat(
-    'HSTS is set over https',
-    isset(\BoardSim\Http\SecurityHeaders::forApi(true)['Strict-Transport-Security'])
-);
-assertThat(
-    'https is detected from the proxy header too',
-    (static function (): bool {
-        $_SERVER['HTTP_X_FORWARDED_PROTO'] = 'https';
-        $detected = \BoardSim\Http\SecurityHeaders::requestIsHttps();
-        unset($_SERVER['HTTP_X_FORWARDED_PROTO']);
-        return $detected;
-    })()
+    'the static channel carries the same policy minus the JSON body rules',
+    $staticHeaders == array_diff_key($headers, ['Content-Type' => 1, 'Cache-Control' => 1])
 );
 
 $htaccess = (string) file_get_contents($root . '/public/.htaccess');
@@ -313,6 +387,25 @@ assertThat(
     ($mirror[1] ?? '') === $csp,
     (string) ($mirror[1] ?? '')
 );
+
+// Apache serves the SPA, the assets, the discovery files and the error pages
+// without PHP, so every always-set header of the PHP channel must appear in
+// .htaccess too — one policy, two delivery channels, no drift.
+foreach ([
+    'X-Content-Type-Options' => 'nosniff',
+    'X-Frame-Options' => 'DENY',
+    'Referrer-Policy' => 'strict-origin-when-cross-origin',
+    'Permissions-Policy' => \BoardSim\Http\SecurityHeaders::PERMISSIONS_POLICY,
+    'Cross-Origin-Resource-Policy' => 'same-origin',
+    'Cross-Origin-Opener-Policy' => 'same-origin',
+    'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains',
+] as $name => $value) {
+    assertThat(
+        sprintf('the .htaccess always sets %s', $name),
+        str_contains($htaccess, sprintf('Header always set %s "%s"', $name, $value))
+    );
+}
+
 assertThat('the static policy keeps immutable asset caching', str_contains($htaccess, 'immutable'));
 assertThat('dotfiles stay denied', str_contains($htaccess, 'Require all denied'));
 
@@ -449,6 +542,162 @@ expect('DELETE /v1/shares/{token}', $router->handle('DELETE', '/v1/shares/' . $s
 expect('GET after revocation is 404', $router->handle('GET', '/v1/shares/' . $shareHttp['token'], []), 404);
 expect('an unknown token is 404', $router->handle('GET', '/v1/shares/' . str_repeat('b', 64), []), 404);
 expect('POST /v1/shares without run_ids', $router->handle('POST', '/v1/shares', []), 400);
+
+printf("\n== Cookie policy ==\n");
+
+// The policy was hardened at the top of this script, before any output — the
+// same position the HTTP entry points pin it in. The product sets no cookies:
+// no login, a stateless API, runs addressed by unguessable UUIDs. The policy
+// exists so that stays true structurally: nothing outside it may set a cookie
+// or start a session, and a session something else starts (a host php.ini, a
+// future feature) inherits hardened attributes before any cookie can exist.
+$params = session_get_cookie_params();
+assertThat('a session cookie would be HttpOnly', $params['httponly'] === true);
+assertThat('a session cookie would be Secure', $params['secure'] === true);
+assertThat('a session cookie would be SameSite=Lax', $params['samesite'] === 'Lax');
+assertThat('a session cookie would stay on the site path', $params['path'] === '/');
+assertThat('a session cookie would stay host-only', $params['domain'] === '');
+assertThat('session ids cannot travel in URLs', ini_get('session.use_trans_sid') === '0');
+assertThat('session ids are accepted from cookies only', ini_get('session.use_only_cookies') === '1');
+assertThat('foreign session ids are rejected', ini_get('session.use_strict_mode') === '1');
+
+$forced = \BoardSim\Http\CookiePolicy::attributes([
+    'lifetime' => 3600,
+    'secure' => false,
+    'httponly' => false,
+    'samesite' => 'None',
+    'path' => '/evil',
+    'domain' => '.example.net',
+]);
+assertThat('the policy forces HttpOnly whatever a caller asks', $forced['httponly'] === true);
+assertThat('the policy forces Secure whatever a caller asks', $forced['secure'] === true);
+assertThat('the policy forces SameSite=Lax whatever a caller asks', $forced['samesite'] === 'Lax');
+assertThat('the policy pins the cookie path', $forced['path'] === '/');
+assertThat('the policy keeps the cookie host-only', $forced['domain'] === '');
+assertThat('a caller may only choose the lifetime', $forced['lifetime'] === 3600);
+
+$cookieOffenders = (static function () use ($root): array {
+    $offenders = [];
+    $directories = [$root . '/src', $root . '/public', $root . '/deploy', $root . '/bin', $root . '/tools'];
+
+    foreach ($directories as $directory) {
+        if (!is_dir($directory)) {
+            continue;
+        }
+
+        $files = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS)
+        );
+
+        foreach ($files as $file) {
+            /** @var SplFileInfo $file */
+            if (!$file->isFile() || !str_ends_with($file->getFilename(), '.php')) {
+                continue;
+            }
+
+            $path = str_replace('\\', '/', $file->getPathname());
+
+            if (str_ends_with($path, '/src/Http/CookiePolicy.php')) {
+                continue;
+            }
+
+            if (preg_match('/\bsetcookie\s*\(|\bsession_start\s*\(|Set-[Cc]ookie:/', (string) file_get_contents($path)) === 1) {
+                $offenders[] = substr($path, strlen($root) + 1);
+            }
+        }
+    }
+
+    return $offenders;
+})();
+
+assertThat(
+    'no code outside CookiePolicy sets a cookie or starts a session',
+    $cookieOffenders === [],
+    implode(', ', $cookieOffenders)
+);
+
+foreach (['public/api/index.php', 'web/dev-router.php', 'deploy/smoke-router.php'] as $entryPoint) {
+    assertThat(
+        sprintf('%s hardens the cookie policy before anything answers', $entryPoint),
+        str_contains((string) file_get_contents($root . '/' . $entryPoint), 'CookiePolicy::harden()')
+    );
+}
+
+printf("\n== Redirects ==\n");
+
+$smokeRouter = (string) file_get_contents($root . '/deploy/smoke-router.php');
+preg_match("#if \(\\\$path === '/app/index\.html'\) \{(.*?)\n\}#s", $smokeRouter, $redirect);
+
+assertThat('the smoke router mirrors the duplicate-shell redirect', isset($redirect[1]));
+assertThat(
+    'the mirrored redirect is a 301 to the canonical root',
+    isset($redirect[1])
+    && str_contains($redirect[1], 'http_response_code(301)')
+    && str_contains($redirect[1], "header('Location: /')")
+);
+assertThat(
+    'the mirrored redirect carries no body (ZAP 10044 compares the body with Location+300)',
+    isset($redirect[1]) && !preg_match('/\b(?:echo|print|readfile|include|require)\b/', $redirect[1])
+);
+
+assertThat(
+    'Apache answers the duplicate shell from the zero-body redirector',
+    str_contains($htaccess, 'RewriteCond %{THE_REQUEST} \s/+app/index\.html[\s?] [NC]')
+    && str_contains($htaccess, 'RewriteRule ^app/index\.html$ redirect-to-root.php [L]')
+);
+assertThat(
+    'the redirector emits a status and a Location and nothing else',
+    is_file($root . '/public/redirect-to-root.php')
+    && str_contains((string) file_get_contents($root . '/public/redirect-to-root.php'), "header('Location: /');")
+    && !preg_match('/\b(?:echo|print|readfile|include|require)\b/', (string) file_get_contents($root . '/public/redirect-to-root.php'))
+);
+
+printf("\n== Failure branches carry the policy ==\n");
+
+$frontController = (string) file_get_contents($root . '/public/api/index.php');
+$shim = (string) file_get_contents($root . '/deploy/api-index-shim.php');
+$cspHeaderLine = 'Content-Security-Policy: ' . $csp;
+
+foreach ([
+    'the front controller 500' => $frontController,
+    'the deploy shim 500' => $shim,
+    'the smoke router mirror' => $smokeRouter,
+] as $where => $source) {
+    assertThat(
+        sprintf('%s carries the full header set', $where),
+        str_contains($source, "header('X-Content-Type-Options: nosniff')")
+            && str_contains($source, "header('X-Frame-Options: DENY')")
+            && str_contains($source, $cspHeaderLine)
+            && str_contains($source, "header('Strict-Transport-Security: max-age=31536000; includeSubDomains')")
+    );
+}
+
+assertThat(
+    'the deploy shim 500 no longer publishes filesystem paths or PHP settings',
+    !str_contains($shim, "'open_basedir' =>")
+    && !str_contains($shim, "'tried' =>")
+);
+
+printf("\n== Subresource integrity ==\n");
+
+$errorPages = glob($root . '/public/errors/*.html') ?: [];
+assertThat('the five error pages are present', count($errorPages) === 5, (string) count($errorPages));
+assertSubresourceIntegrity(
+    'the error pages',
+    array_map(static fn (string $page): string => (string) file_get_contents($page), $errorPages),
+    $root . '/public'
+);
+
+$builtShell = $root . '/public/app/index.html';
+
+if (is_file($builtShell)) {
+    assertSubresourceIntegrity('the built shell', [(string) file_get_contents($builtShell)], $root . '/public');
+} else {
+    // public/app/ is generated and gitignored: a fresh clone legitimately has
+    // no built shell. bin/verify-meta.php --require-build covers the pins in
+    // the CI job that runs right after npm run build.
+    printf("  SKIP  the built shell is not built — npm run build pins its assets\n");
+}
 
 printf("\n%d passed, %d failed\n", $passed, $failed);
 exit($failed === 0 ? 0 : 1);

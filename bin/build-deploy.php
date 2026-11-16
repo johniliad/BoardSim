@@ -191,6 +191,12 @@ copyTree($root . '/public/errors', $docrootOut . '/errors');
 copyFile($root . '/public/.htaccess', $docrootOut . '/.htaccess');
 copyFile($root . '/deploy/api-index-shim.php', $docrootOut . '/api/index.php');
 
+// The zero-body redirect for the duplicate shell address. Apache's own 301
+// page carries a body that sits on ZAP's "Big Redirect Detected" line (10044:
+// a body larger than the Location header plus 300 bytes); this file answers
+// with the status, the Location and nothing else.
+copyFile($root . '/public/redirect-to-root.php', $docrootOut . '/redirect-to-root.php');
+
 // The licence obligation, served rather than shipped: the origin answers
 // /licences.txt with the attributions that apply to the bytes a browser downloads.
 copyFile($root . '/public/licences.txt', $docrootOut . '/licences.txt');
@@ -430,6 +436,7 @@ if ($options['zip']) {
             'licences.txt',
             'app/index.html',
             'api/index.php',
+            'redirect-to-root.php',
             'errors/error.css',
             'errors/400.html',
             'errors/403.html',

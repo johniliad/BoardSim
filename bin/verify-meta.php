@@ -74,14 +74,16 @@ function checkShell(string $label, string $html, string $canonical, string $ogTi
     $required = [
         '<title>' . $ogTitle . '</title>' => 'the exact title',
         '<link rel="canonical" href="' . $canonical . '"' => 'the canonical URL',
-        'name="author" content="Dr. John Iliadis"' => 'the author meta',
+        'name="author" content="Dr. John ILIADIS"' => 'the author meta',
         '<link rel="author" href="https://www.iliadis.net/"' => 'the author link',
         'property="og:type" content="website"' => 'og:type',
         'property="og:site_name" content="BoardSim"' => 'og:site_name',
         'property="og:title" content="' . $ogTitle . '"' => 'og:title',
         'property="og:url" content="' . $canonical . '"' => 'og:url',
         'property="og:description"' => 'og:description',
+        'property="og:image" content="' . $canonical . 'app/boardsim-social.jpg"' => 'the og:image card',
         'name="twitter:card"' => 'the Twitter card',
+        'name="twitter:image" content="' . $canonical . 'app/boardsim-social.jpg"' => 'the twitter:image card',
         '"@type": "WebApplication"' => 'the WebApplication type',
         '"@context": "https://schema.org"' => 'the schema.org context',
     ];
@@ -128,7 +130,7 @@ function checkShell(string $label, string $html, string $canonical, string $ogTi
     check(
         $label . ' JSON-LD names the author',
         ($data['author']['@type'] ?? null) === 'Person'
-            && ($data['author']['name'] ?? null) === 'Dr. John Iliadis'
+            && ($data['author']['name'] ?? null) === 'Dr. John ILIADIS'
     );
     check(
         $label . ' JSON-LD states the application is free',
@@ -139,10 +141,57 @@ function checkShell(string $label, string $html, string $canonical, string $ogTi
         is_array($data['featureList'] ?? null) && count($data['featureList']) >= 3
     );
     check(
-        $label . ' JSON-LD points at the logo that is actually served',
+        $label . ' JSON-LD points at images that are actually served',
         ($data['logo'] ?? null) === $canonical . 'app/boardsim-mark.svg'
-            && ($data['image'] ?? null) === $canonical . 'app/boardsim-logo.svg'
+            && ($data['image'] ?? null) === $canonical . 'app/boardsim-social.jpg'
     );
+}
+
+/**
+ * The built shell must pin every script and stylesheet it references with an
+ * integrity digest that matches the bytes on disk (ZAP: "Sub Resource
+ * Integrity Attribute Missing"). web/scripts/sri.mjs writes the pins during
+ * `npm run build`; this re-hashes the assets independently, so a stale or
+ * missing pin fails the front-end job rather than a visitor's browser.
+ */
+function assertShellSubresourceIntegrity(string $html): void
+{
+    $tags = [];
+
+    if (preg_match_all('#<script\b[^>]*\bsrc="[^"]*"[^>]*>#', $html, $found) === 1) {
+        $tags = array_merge($tags, $found[0]);
+    }
+
+    if (preg_match_all('#<link\b[^>]*\brel="stylesheet"[^>]*>#', $html, $found) === 1) {
+        $tags = array_merge($tags, $found[0]);
+    }
+
+    check('the built shell references at least one script or stylesheet', $tags !== []);
+
+    $assetBase = dirname(__DIR__) . '/public';
+
+    foreach ($tags as $tag) {
+        preg_match('#\b(?:src|href)="([^"]+)"#', $tag, $url);
+        $reference = (string) ($url[1] ?? '');
+
+        if (!str_starts_with($reference, '/')) {
+            check("the built shell reference {$reference} is same-origin", false);
+
+            continue;
+        }
+
+        $file = rtrim($assetBase, '/') . $reference;
+        $digest = is_file($file)
+            ? 'sha384-' . base64_encode((string) hash('sha384', (string) file_get_contents($file), true))
+            : null;
+        preg_match('#integrity="([^"]+)"#', $tag, $pin);
+
+        check(
+            "the built shell pins {$reference}",
+            $digest !== null && isset($pin[1]) && $pin[1] === $digest,
+            isset($pin[1]) ? 'stale digest' : 'no integrity attribute'
+        );
+    }
 }
 
 section('The served shell (source)');
@@ -171,6 +220,7 @@ if (!is_file($builtPath)) {
     }
 } else {
     checkShell('public/app/index.html', (string) file_get_contents($builtPath), $canonical, $ogTitle);
+    assertShellSubresourceIntegrity((string) file_get_contents($builtPath));
 }
 
 section('robots.txt');
@@ -217,7 +267,7 @@ foreach ($endpoints as $endpoint) {
 }
 
 check('llms.txt states what the product is not', str_contains($llms, '## What it is not'));
-check('llms.txt names the author', str_contains($llms, 'Dr. John Iliadis'));
+check('llms.txt names the author', str_contains($llms, 'Dr. John ILIADIS'));
 
 section('The logo');
 
@@ -264,7 +314,7 @@ $appSource = (string) file_get_contents($root . '/web/src/App.tsx');
 $homeSource = (string) file_get_contents($root . '/web/src/Home.tsx');
 
 check('the header renders the mark', str_contains($appSource, 'src="/app/boardsim-mark.svg"'));
-check('the homepage renders the lockup', str_contains($homeSource, 'src="/app/boardsim-logo.svg"'));
+check('the homepage renders the explainer image', str_contains($homeSource, 'src="/app/boardsim-hero.webp"'));
 check(
     'the header no longer draws its own letters',
     preg_match('#className="bs-brand__mark"[^>]*>\s*BS#', $appSource) !== 1
@@ -273,8 +323,8 @@ check(
     'both images declare their size, so nothing shifts while they load',
     str_contains($appSource, 'width={42}')
         && str_contains($appSource, 'height={42}')
-        && str_contains($homeSource, 'width={320}')
-        && str_contains($homeSource, 'height={88}')
+        && str_contains($homeSource, 'width={600}')
+        && str_contains($homeSource, 'height={400}')
 );
 check(
     'the favicon is declared in the served shell',
@@ -290,10 +340,10 @@ check(
     str_contains($htaccess, 'RewriteCond %{REQUEST_FILENAME} -f')
 );
 check(
-    'the duplicate shell address is redirected',
+    'the duplicate shell address is redirected by the zero-body redirector',
     str_contains($htaccess, 'THE_REQUEST')
-        && str_contains($htaccess, 'app/index\.html')
-        && str_contains($htaccess, '[R=301,L]')
+        && str_contains($htaccess, 'RewriteRule ^app/index\.html$ redirect-to-root.php [L]')
+        && is_file($root . '/public/redirect-to-root.php')
 );
 check(
     'discovery files are cached briefly, not immutably',
