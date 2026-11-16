@@ -22,11 +22,12 @@ declare(strict_types=1);
  *                     reads it. Nothing else in the document root knows where the
  *                     backend lives.
  *
- * If the pointer is absent or wrong, this file answers with a JSON error naming
- * every path it tried and the active open_basedir, because on a host with no
- * shell access that response is the diagnosis. Fail loudly, never with a blank
- * 500 and never with an HTML page: a browser that asked for JSON must be told,
- * in JSON, why it did not get any.
+ * If the pointer is absent or wrong, this file answers with a JSON 500 that
+ * says what is wrong without publishing anything about the host: no
+ * filesystem paths, no PHP settings, nothing an attacker can turn into a map
+ * of the server. Fail loudly, never with a blank 500 and never with an HTML
+ * page: a browser that asked for JSON must be told, in JSON, why it did not
+ * get any — with the security headers every other response carries.
  */
 
 $candidates = [];
@@ -37,7 +38,7 @@ if (is_file($pointer)) {
     $value = include $pointer;
 
     if (is_string($value) && trim($value) !== '') {
-        $candidates['api/backend.php'] = $value;
+        $candidates[] = $value;
     }
 }
 
@@ -47,13 +48,12 @@ if (is_file($pointer)) {
 
 // Last resort: a backend that sits beside the document root. Harmless when it
 // does not exist, and it saves a pointer file in the sibling-folder layout.
-$candidates['sibling boardsim-app'] = dirname(__DIR__, 2) . '/boardsim-app';
-$candidates['sibling boardsim-backend'] = dirname(__DIR__, 2) . '/boardsim-backend';
+$candidates[] = dirname(__DIR__, 2) . '/boardsim-app';
+$candidates[] = dirname(__DIR__, 2) . '/boardsim-backend';
 
-$tried = [];
 $controller = null;
 
-foreach ($candidates as $source => $root) {
+foreach ($candidates as $root) {
     $root = rtrim((string) $root, "/\\");
 
     if ($root === '') {
@@ -61,18 +61,29 @@ foreach ($candidates as $source => $root) {
     }
 
     $file = $root . '/public/api/index.php';
-    $found = is_file($file);
 
-    $tried[] = ['source' => $source, 'root' => $root, 'controller_found' => $found];
-
-    if ($found && $controller === null) {
+    if (is_file($file) && $controller === null) {
         $controller = $file;
     }
 }
 
 if ($controller === null) {
+    // The headers mirror BoardSim\Http\SecurityHeaders::forApi() (checked by
+    // bin/verify-http.php): a diagnosis response must not be the one response
+    // on this origin without a Content-Security-Policy. The body names the
+    // two failure modes without listing any filesystem path or PHP setting —
+    // a 500 an attacker can provoke must not double as a host inventory.
     http_response_code(500);
     header('Content-Type: application/json; charset=utf-8');
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: DENY');
+    header('Referrer-Policy: strict-origin-when-cross-origin');
+    header("Content-Security-Policy: default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; script-src 'self'; style-src 'self'; style-src-attr 'none'; img-src 'self' data:; font-src 'self'; connect-src 'self'");
+    header('Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()');
+    header('Cross-Origin-Resource-Policy: same-origin');
+    header('Cross-Origin-Opener-Policy: same-origin');
+    header('Cache-Control: no-store');
+    header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
 
     echo json_encode([
         'error' => is_file($pointer) ? 'BACKEND_NOT_FOUND' : 'SHIM_NOT_CONFIGURED',
@@ -82,8 +93,6 @@ if ($controller === null) {
         'fix' => 'Create or edit api/backend.php so it returns the absolute path of the '
             . 'backend directory (the one containing src/ and public/), e.g. '
             . "<?php return '/home/USER/boardsim-app';",
-        'open_basedir' => ini_get('open_basedir') ?: null,
-        'tried' => $tried,
     ], JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 
     return;

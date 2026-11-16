@@ -1,11 +1,11 @@
 {
-  "name": "johniliadis/boardsim",
+  "name": "johniliad/boardsim",
   "description": "BoardSim - executive cybersecurity decision simulator. Deterministic scoring and regulatory engine.",
   "type": "project",
   "license": "Apache-2.0",
   "authors": [
     {
-      "name": "Dr. John Iliadis",
+      "name": "Dr. John ILIADIS",
       "homepage": "https://www.iliadis.net"
     }
   ],

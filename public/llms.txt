@@ -7,7 +7,7 @@
 > replay of the recorded decisions and a separate regulatory assessment.
 
 Canonical: https://boardsim.iliadis.net/
-Author: Dr. John Iliadis — https://www.iliadis.net/
+Author: Dr. John ILIADIS — https://www.iliadis.net/
 Language: English (en)
 Licence of the interface: free to use, no account, no cost.
 
@@ -77,4 +77,4 @@ Writes are rate limited per client (10 run creations, 30 decisions, 10 shares an
 ## Citation
 
 BoardSim (2026). BoardSim — Executive decision-making under pressure.
-https://boardsim.iliadis.net/ — Dr. John Iliadis, https://www.iliadis.net/
+https://boardsim.iliadis.net/ — Dr. John ILIADIS, https://www.iliadis.net/

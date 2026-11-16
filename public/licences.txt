@@ -8,13 +8,13 @@ It is the readable companion to two files in the source repository:
   LICENSE                the full Apache License 2.0 text for BoardSim itself
   THIRD-PARTY-NOTICES.md the same attributions, with the reasoning behind them
 
-Source: https://github.com/johniliadis/BoardSim
+Source: https://github.com/johniliad/BoardSim
 
 
 1. BoardSim
 -----------
 
-Copyright 2026 Dr. John Iliadis.
+Copyright 2026 Dr. John ILIADIS.
 
 Licensed under the Apache License, Version 2.0. You may obtain a copy of the
 License at:
