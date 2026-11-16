@@ -58,9 +58,18 @@
   # The shell is one document served at /. The build puts it in app/index.html,
   # so without this the same HTML answers at two addresses, splitting inbound
   # links and handing a crawler a duplicate. THE_REQUEST matches only the
-  # client's original request, so the internal rewrite below is unaffected.
+  # client's original request, so the SPA fallback's internal rewrite to
+  # app/index.html (the ^$ rule above and the fallback below) never triggers
+  # this one, and / can never redirect to itself.
+  #
+  # The redirect is answered by redirect-to-root.php rather than Apache's own
+  # 301 page: the default body carries the status title, a link and the server
+  # signature, which puts a short-Location redirect right on the line ZAP
+  # draws for "Big Redirect Detected" (10044: a body larger than its Location
+  # header plus 300 bytes). The PHP answer sends the status and the Location
+  # and no body at all; the always-set header rules below still apply.
   RewriteCond %{THE_REQUEST} \s/+app/index\.html[\s?] [NC]
-  RewriteRule ^ / [R=301,L]
+  RewriteRule ^app/index\.html$ redirect-to-root.php [L]
 
   # api/index.php must exist (installed from deploy/api-index-shim.php). If it
   # does not, fail loudly; never answer an API path with a static page.
@@ -125,13 +134,29 @@ ErrorDocument 503 /errors/503.html
   Header always set Referrer-Policy "strict-origin-when-cross-origin"
   Header always set X-Frame-Options "DENY"
   Header always set Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
+  # Explicit same-origin isolation. The site sends no CORS headers at all, so
+  # the browser's Same-Origin Policy already governs reads; these state it so
+  # no intermediary has to guess, and a cross-origin document cannot embed or
+  # read this origin's resources (ZAP 10098: cross-domain misconfiguration).
+  Header always set Cross-Origin-Resource-Policy "same-origin"
+  Header always set Cross-Origin-Opener-Policy "same-origin"
   # Must match BoardSim\Http\SecurityHeaders::CONTENT_SECURITY_POLICY.
   # bin/verify-http.php fails if these drift apart.
   Header always set Content-Security-Policy "default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; script-src 'self'; style-src 'self'; style-src-attr 'none'; img-src 'self' data:; font-src 'self'; connect-src 'self'"
-  # Only enable on an HTTPS-only origin; see docs/security-headers.md.
+  # Always on, mirroring SecurityHeaders::forApi(). A browser ignores HSTS
+  # received over plain HTTP (RFC 6797), so unconditional emission cannot lock
+  # an HTTP origin out; it does guarantee the header on every URL a scanner or
+  # a browser reaches, including API responses behind a TLS-terminating proxy.
   Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
   <FilesMatch "\.(js|css|woff2|png|ico)$">
     Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+  # Stable-named images (the social card, the hero explainer): cacheable
+  # briefly, not immutably — the same URL may carry new pixels after the
+  # source image is re-rendered, and a year-old social card is worse than a
+  # re-fetch.
+  <FilesMatch "\.(jpe?g|webp)$">
+    Header set Cache-Control "public, max-age=3600"
   </FilesMatch>
   # Discovery files are cheap and change with a deploy, so cache them briefly
   # instead of immutably. llms.txt is stated as plain text so no agent has to

@@ -83,6 +83,12 @@ pnpm-debug.log*
 .eslintcache
 .stylelintcache
 
+# pics-source carries the same explainer image in three formats. The webp is
+# the one the README banner uses, so it is tracked; the other two formats are
+# local working copies for regenerating derived artefacts (the social card).
+pics-source/*.jpg
+pics-source/*.png
+
 # ─── Generated reports, coverage and test output ────────────────────────────
 # Enumeration output is reproducible from the pinned bundle, so it is not
 # committed. Regenerate with: php bin/enumerate.php

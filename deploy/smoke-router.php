@@ -57,26 +57,48 @@ $errorPage = static function (int $status) use ($docroot): bool {
     return true;
 };
 
-// Emit the same static-channel headers public/.htaccess sets, so the smoke test
-// exercises the real CSP string rather than a copy. The backend is found through
-// the pointer this deployment already contains.
+// The backend is found through the pointer this deployment already contains.
+// A build always writes it, and the headers must be up before anything
+// answers — the API, streamed files, error pages and the redirect below are
+// all behind this one emission point. If the pointer or the backend is
+// missing, the artefact is broken: fail closed with a mirrored-header 500
+// rather than serve headerless pages.
+$mirrorHeaders = static function (): void {
+    // Mirrors BoardSim\Http\SecurityHeaders::forStatic(); bin/verify-http.php
+    // checks this copy against the class constant so it cannot drift.
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: DENY');
+    header('Referrer-Policy: strict-origin-when-cross-origin');
+    header("Content-Security-Policy: default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; script-src 'self'; style-src 'self'; style-src-attr 'none'; img-src 'self' data:; font-src 'self'; connect-src 'self'");
+    header('Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()');
+    header('Cross-Origin-Resource-Policy: same-origin');
+    header('Cross-Origin-Opener-Policy: same-origin');
+    header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+};
+
 $backendPointer = $docroot . '/api/backend.php';
+$backendRoot = is_file($backendPointer)
+    ? rtrim(str_replace('\\', '/', (string) require $backendPointer), '/')
+    : '';
 
-if (is_file($backendPointer)) {
-    $backendRoot = rtrim(str_replace('\\', '/', (string) require $backendPointer), '/');
+if ($backendRoot === '' || !is_file($backendRoot . '/src/bootstrap.php')) {
+    $mirrorHeaders();
 
-    if (is_file($backendRoot . '/src/bootstrap.php')) {
-        require_once $backendRoot . '/src/bootstrap.php';
-
-        if (class_exists(\BoardSim\Http\SecurityHeaders::class)) {
-            \BoardSim\Http\SecurityHeaders::emit(
-                \BoardSim\Http\SecurityHeaders::forStatic(
-                    \BoardSim\Http\SecurityHeaders::requestIsHttps()
-                )
-            );
-        }
-    }
+    return $errorPage(500);
 }
+
+require_once $backendRoot . '/src/bootstrap.php';
+
+if (!class_exists(\BoardSim\Http\SecurityHeaders::class)) {
+    $mirrorHeaders();
+
+    return $errorPage(500);
+}
+
+// The cookie policy is pinned before anything answers, so a cookie can never
+// leave this origin without HttpOnly, Secure and SameSite.
+\BoardSim\Http\CookiePolicy::harden();
+\BoardSim\Http\SecurityHeaders::emit(\BoardSim\Http\SecurityHeaders::forStatic());
 
 // Mirrors public/.htaccess: an ACME or DCV validation path is reachable without
 // the origin header, because the certificate authority fetches it from the origin
@@ -113,6 +135,13 @@ if (in_array($path, ['/robots.txt', '/sitemap.xml', '/llms.txt'], true)
 
 // Mirrors public/.htaccess: the shell answers at / only, so the address the
 // build writes it to redirects rather than serving a second copy.
+//
+// The body is deliberately empty. ZAP's "Big Redirect Detected" (10044)
+// compares a redirect's body against the length of its Location header plus
+// 300 bytes; a redirect that carries the page it is leaving — the shell, an
+// error page, anything — turns a navigation into a disclosure channel. This
+// branch sends the status and the Location and nothing else, and it inherits
+// the full security-header set from the emission point above.
 if ($path === '/app/index.html') {
     http_response_code(301);
     header('Location: /');

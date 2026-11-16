@@ -732,7 +732,7 @@ expect(
     str_contains($index['body'], '<title>' . $ogTitle . '</title>')
         && str_contains($index['body'], 'property="og:site_name" content="BoardSim"')
         && str_contains($index['body'], '"@type": "WebApplication"')
-        && str_contains($index['body'], 'name="author" content="Dr. John Iliadis"'),
+        && str_contains($index['body'], 'name="author" content="Dr. John ILIADIS"'),
     [],
     'title, og:site_name, author or JSON-LD missing from the served HTML: '
         . 'web/index.html must carry them, not inject them at runtime'
@@ -816,6 +816,24 @@ expect(
     )
 );
 
+if (in_array($duplicate['status'], [301, 302, 308], true)) {
+    $location = (string) ($duplicate['headers']['location'] ?? '');
+
+    expect(
+        'the redirect carries no body worth leaking',
+        strlen($duplicate['body']) <= strlen($location) + 32,
+        $duplicate,
+        sprintf(
+            'Location "%s" (%d bytes) with a %d-byte body — a redirect body over '
+            . 'Location+300 bytes is what ZAP flags as a potential leak (10044); '
+            . 'public/.htaccess must answer this address from redirect-to-root.php',
+            $location,
+            strlen($location),
+            strlen($duplicate['body'])
+        )
+    );
+}
+
 printf("\n== Security headers ==\n");
 
 $headers = $index['headers'];
@@ -848,6 +866,58 @@ if (str_starts_with($base, 'https://')) {
         str_contains($headers['strict-transport-security'] ?? '', 'max-age='),
         [],
         'got nothing: the vhost must terminate HTTPS for HSTS to be meaningful'
+    );
+}
+
+$cspHeader = (string) ($headers['content-security-policy'] ?? '');
+
+expect(
+    'the CSP defines the directives that have no default-src fallback',
+    str_contains($cspHeader, "base-uri")
+        && str_contains($cspHeader, "form-action")
+        && str_contains($cspHeader, "frame-ancestors"),
+    [],
+    sprintf('got "%s" (ZAP 10055-13)', $cspHeader)
+);
+
+expect(
+    'the origin states same-origin cross-domain isolation',
+    ($headers['cross-origin-resource-policy'] ?? '') === 'same-origin'
+        && ($headers['cross-origin-opener-policy'] ?? '') === 'same-origin',
+    [],
+    sprintf(
+        'CORP "%s", COOP "%s"',
+        $headers['cross-origin-resource-policy'] ?? 'nothing',
+        $headers['cross-origin-opener-policy'] ?? 'nothing'
+    )
+);
+
+// The API channel is served by PHP, not Apache, so it must carry the same
+// policy itself. This is the response that used to go out without HSTS when
+// the header was gated on the scheme the origin saw behind the TLS proxy.
+$healthResponse = httpGet($base . '/v1/health');
+$healthHeaders = $healthResponse['headers'];
+
+expect(
+    'the API sends X-Content-Type-Options',
+    ($healthHeaders['x-content-type-options'] ?? '') === 'nosniff',
+    [],
+    sprintf('got "%s"', $healthHeaders['x-content-type-options'] ?? 'nothing')
+);
+
+expect(
+    'the API sends the Content-Security-Policy',
+    str_contains($healthHeaders['content-security-policy'] ?? '', "default-src 'self'"),
+    [],
+    sprintf('got "%s"', $healthHeaders['content-security-policy'] ?? 'nothing')
+);
+
+if (str_starts_with($base, 'https://')) {
+    expect(
+        'the API sends HSTS',
+        str_contains($healthHeaders['strict-transport-security'] ?? '', 'max-age='),
+        [],
+        sprintf('got "%s"', $healthHeaders['strict-transport-security'] ?? 'nothing')
     );
 }
 
