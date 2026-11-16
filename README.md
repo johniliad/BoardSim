@@ -3,6 +3,107 @@
 **Executive Decision-Making Under Pressure.** BoardSim is a board-level executive
 cybersecurity decision simulator with a deterministic, server-authoritative engine.
 
+![BoardSim — executive cyber decision simulation: a critical cyber incident scenario flows into one executive decision, with simulated consequences and a board outcome](pics-source/boardsim2.webp)
+
+## About
+
+BoardSim demonstrates the capability I consider most important at executive level:
+turning cybersecurity analysis into decisions. I designed it as a board-level
+simulation in which leaders must weigh risk, business impact, constraints and
+competing priorities rather than simply review another dashboard. For an employer,
+BoardSim provides tangible evidence of strategic thinking, risk appetite awareness,
+executive judgement and the ability to model how cybersecurity choices affect the
+wider organisation.
+
+## So what?
+
+**The problem, in one sentence:** dashboards tell executives what happened, but
+nothing prepares them for the moment they must *decide* — under time pressure,
+with incomplete information, with regulators and customers already waiting — and
+that moment decides how an incident ends.
+
+**A few-seconds demo:** [watch BoardSim run on YouTube](https://youtu.be/dXDKiQYx4WU).
+
+### What problem this solves and for whom
+
+BoardSim turns a cyber crisis into a repeatable, scored board exercise: a real
+decision under pressure, a deterministic score from a published rule set, a
+rule-by-rule trace that shows *why*, and a shareable read-only result.
+
+- **Boards and executives** — practise the decision itself rather than another
+  briefing, and see the consequences of each option before the real crisis.
+- **CISOs and security leaders** — evidence executive-level judgement to a board
+  or an employer with results that are reproducible rather than anecdotal.
+- **Hiring panels and educators** — observe decision quality against a published,
+  inspectable standard instead of an unstructured interview or a lecture.
+
+There is no account, no cost and no dashboard to read: the product is the
+decision and its trace.
+
+## Methodology
+
+**Server-authoritative and deterministic.** The browser is a pure renderer: it
+never computes a score, never receives score deltas and cannot influence the
+number. Every figure is derived on the server from pinned inputs, so the same
+decisions always produce the same score — no model, no randomness, no hindsight.
+
+**The exercise.** Fourteen board-level scenarios, each four stages deep with
+three options per stage. A run records every decision behind an idempotency key,
+then the board brief: seven substantiated fields in the `leadership` view
+(situation, impact, uncertainty, action, funding, residual risk, board ask) or
+four in the `executive` view. `board_crisis` is a declared refusal: the API
+answers 422 rather than score an unvalidated configuration.
+
+**The score.** Ten weighted dimensions each start neutral at 70. The decision
+rules that fire add or subtract their authored deltas, the risk-appetite setting
+adds its modifier to risk judgment only, and each dimension is clipped to
+0–100:
+
+```
+dimension[d] = clamp(70 + Σ rule_deltas[d] + appetite_modifier[d], 0, 100)
+numerator    = Σ (weight[d] × dimension[d])
+score        = floor((numerator + 50) / 100)
+```
+
+The result is an integer from 0 to 100 across five published bands — not a
+percentage of correct answers. Every delta is visible in the result page's rule
+trace, together with the arithmetic that produced the final number.
+
+**The rules.** 47 authored decision rules carry fixed dimensional deltas and a
+NIST CSF 2.0 function each, so the trace reads as an operating-model view as
+well as a score. The seven board-pack fields (DR-041..DR-047) score only when
+the chosen option substantiates them; a declined field fires nothing and is
+listed as declined.
+
+**Regulation is assessed separately.** A second engine evaluates 28 regulatory
+instruments from the published register (REG-*) over authored facts, using
+three-valued Kleene logic and a clock engine, and reports applicability, trigger
+and reporting duties — never from the option picked and never as a score input.
+Where the facts do not establish scope, the status is "pending classification",
+not a guess, and instruments that require counsel remain marked as such.
+
+**Reproducibility and integrity.** Every run stores the SHA-256 of the scoring
+policy, the regulatory bundle and the scenario content, so a score can be
+recomputed years later even after the policy is revised. The event log is
+hash-chained and the verification chain is checked on every explain. "What
+would change it?" substitutes an alternative choice, replays it and
+identity-checks the recomputation against the recorded score. Portfolios
+aggregate 3–5 runs, segmented by ruleset, content and difficulty — baselines
+are never merged across versions.
+
+**Calibrated against itself, and only against itself.** The full option space —
+2,268 enumerated runs — reproduces the published goldens exactly; the 1.1.0
+calibration reduced positional bias to −35% and keeps all five bands reachable.
+The weights and deltas remain authored judgement: the score measures how a
+decision compares with the published BoardSim policy — it is not a psychometric,
+hiring or compliance instrument, and every result page says so.
+
+**Everything is inspectable.** The specification is 29 SHA-256-pinned documents;
+content is authored overlays compiled into hashed, immutable bundles; the live
+methodology (formula, weights, appetite modifiers, bands) is served at
+`/v1/methodology` and rendered at `#/methodology`, and every rule, instrument
+and dimension is defined once in `/v1/glossary`.
+
 The 29 Markdown files in `requirements/`, `scenarios/` and `engine/` are the
 specification and are **SHA-256 pinned and immutable** (28 design documents plus
 `10_OPEN_SOURCE.md`, the repository-hygiene requirement). Nothing here edits them;
@@ -41,7 +142,7 @@ on a fresh clone.
 | **Rate limiting** | **Done — per-client fixed window on run creation, decisions, shares and reads; 429 with `Retry-After`** |
 | **Accessibility measurement** | **Done — contrast and target sizes computed and asserted, not asserted** |
 | **Static metadata and discovery** | **Done — author/canonical/Open Graph/JSON-LD `WebApplication` in the served HTML, plus `robots.txt`, stamped `sitemap.xml` and `llms.txt` at the origin root** |
-| **Application logo** | **Done — knight mark and full lockup drawn as SVG: header, homepage hero, favicon and the JSON-LD `logo`/`image`, each asserted by `bin/verify-meta.php`** |
+| **Application imagery** | **Done — SVG knight mark in header and favicon; the boardsim2 explainer as the homepage hero and README banner; a 1200×630 letterboxed social card as `og:image`/`twitter:image`/JSON-LD `image` — all asserted by `bin/verify-meta.php`** |
 | **Acceptance traceability (07)** | **Done — 41 requirements mapped, gaps named: `docs/acceptance-matrix.md`** |
 | **Public demo (06)** | **Done — `DEMO-001`, unscored and unpersisted; the scorer is never constructed** |
 | **Board room (06)** | **Done — 3 challenge cards, advisory 5-minute timer, no 8th field** |
@@ -235,34 +336,41 @@ outage on this site:
   byte-for-byte** with the local build, because a release that changes only PHP and
   HTML keeps the same JS asset hash and would otherwise look deployed.
 
-### The logo
+### The product image
 
-The identity is drawn as SVG in `web/public/`, so it ships with the site rather
-than as a binary nobody can edit:
+One explainer image, `pics-source/boardsim2` (3072×2048), carries the product
+story — a critical cyber incident scenario flowing into one executive decision,
+with simulated consequences and a board outcome. It is kept in three formats
+with identical content, and each use takes the format that suits it:
 
-- `boardsim-mark.svg` — the knight alone, a navy-to-blue gradient piece with its
-  two-step base. Used at 42 px in the header.
-- `boardsim-logo.svg` — the lockup: mark, `Board` in navy, `Sim` in blue, and the
-  short rule beneath, for the homepage hero.
-- `favicon.svg` — the same knight, inset so it survives 16 px.
+- **The homepage hero** — `web/public/boardsim-hero.webp`, the webp served at
+  `/app/boardsim-hero.webp` and declared 600×400 (the exact 3:2 of the source),
+  so the space is reserved before it loads. It replaced the SVG lockup in the
+  hero; the lockup file stays as a brand asset.
+- **The README banner** — the same webp, referenced at the top of this file.
+- **The social card** — `web/public/boardsim-social.jpg`, a 1200×630 letterboxed
+  derivative of the same source (the 3:2 original carries the logo at the top
+  and the attribution at the bottom, and cropping would cut one of them). It is
+  the `og:image`, the `twitter:image` and the JSON-LD `image`: scrapers want a
+  JPEG, not a webp.
+- **The GitHub social preview** — set by hand in *Settings → General → Social
+  preview*: upload `web/public/boardsim-social.jpg` (GitHub accepts up to 1 MB;
+  this derivative is 170 KB).
 
-Two decisions worth keeping. The header's wordmark stays **real text**, so the mark
-next to it is `alt=""` and a screen reader reads the name once; on the homepage the
-lockup carries `alt="BoardSim"` and the `<h1>` makes the page's statement. And both
-images declare `width`/`height`, so the space is reserved before they load and the
-header cannot jump.
+The identity marks stay SVG in `web/public/`: `boardsim-mark.svg` at 42 px in
+the header, `favicon.svg` inset to survive 16 px, and the retired lockup
+`boardsim-logo.svg` kept as the brand asset. The header's wordmark stays **real
+text**, so the mark next to it is `alt=""` and a screen reader reads the name
+once.
 
-There is deliberately no `og:image`: social platforms need a raster, and a
-generated PNG would go stale the moment the logo changes. Supply a 1200×630 PNG
-and it is one `<meta>` line plus a line in the JSON-LD.
-
-`bin/verify-meta.php` asserts the three files parse, that the mark and the favicon
-are the same drawing, that the header and hero reference them, that the sizes are
-declared, and that the JSON-LD `logo`/`image` URLs match what is served.
+`bin/verify-meta.php` asserts the SVG files parse, that the mark and the favicon
+are the same drawing, that the header and the hero reference the right images
+with declared sizes, and that the JSON-LD `logo`/`image` URLs match what is
+served.
 
 ### Licence
 
-**Apache License 2.0** — see [`LICENSE`](LICENSE). Copyright 2026 Dr. John Iliadis.
+**Apache License 2.0** — see [`LICENSE`](LICENSE). Copyright 2026 Dr. John ILIADIS.
 
 Note that the licence covers the code and the authored overlays. The regulatory
 material referenced in `requirements/04_REGULATORY_REGISTER.md` and the pinned

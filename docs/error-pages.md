@@ -44,6 +44,12 @@ an operator meets first, and they used to be Apache's grey page.
    The `.htaccess` `<FilesMatch>` for the error pages overrides the immutable
    asset rule.
 5. **`noindex`.** They are `noindex` and must never appear in a sitemap.
+6. **Pinned stylesheet.** Each page references `error.css` with a `sha384`
+   integrity attribute, because ZAP flags an unpinned stylesheet ("Sub Resource
+   Integrity Attribute Missing") and a stale pin would break the page in the
+   browser instead. After editing `error.css`, refresh the five pins with
+   `node web/scripts/sri.mjs` (also run by `npm run build`);
+   `bin/verify-http.php` re-hashes the stylesheet and fails on a stale digest.
 
 ## Two behaviours worth knowing
 

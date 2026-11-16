@@ -20,8 +20,22 @@ $bootstrap = $root . '/src/bootstrap.php';
 // instead of installed through deploy/api-index-shim.php, that assumption breaks
 // here — fail loudly and say so, rather than emitting a confusing require error.
 if (!is_file($bootstrap)) {
+    // The bootstrap is the autoloader, so BoardSim\Http\SecurityHeaders cannot
+    // be loaded in this branch: the headers are written out here, and
+    // bin/verify-http.php checks this copy against the class constant so the
+    // two cannot drift. A 500 an attacker can provoke must not be the one
+    // response on this origin without a Content-Security-Policy.
     http_response_code(500);
     header('Content-Type: application/json; charset=utf-8');
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: DENY');
+    header('Referrer-Policy: strict-origin-when-cross-origin');
+    header("Content-Security-Policy: default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; script-src 'self'; style-src 'self'; style-src-attr 'none'; img-src 'self' data:; font-src 'self'; connect-src 'self'");
+    header('Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()');
+    header('Cross-Origin-Resource-Policy: same-origin');
+    header('Cross-Origin-Opener-Policy: same-origin');
+    header('Cache-Control: no-store');
+    header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
 
     echo json_encode([
         'error' => 'ROOT_NOT_FOUND',
@@ -54,7 +68,13 @@ $local = \BoardSim\Infrastructure\EnvFile::bootstrap($root);
 
 $devMode = getenv('BOARDSIM_DEV') === '1';
 
-SecurityHeaders::emit(SecurityHeaders::forApi(SecurityHeaders::requestIsHttps()));
+// The cookie policy is pinned before anything can start a session or set a
+// cookie, so no Set-Cookie this origin ever emits can lack HttpOnly, Secure
+// or SameSite. The app sets no cookies today; this is the guard that keeps
+// that true (and hardens a host-forced session if one ever appears).
+\BoardSim\Http\CookiePolicy::harden();
+
+SecurityHeaders::emit(SecurityHeaders::forApi());
 
 /**
  * @return array{0: int, 1: mixed}

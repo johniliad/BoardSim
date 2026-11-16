@@ -164,7 +164,7 @@ export default function App() {
             <p className="bs-byline">
               <span>Built by</span>
               <a href="https://www.iliadis.net/#john-iliadis" rel="author">
-                Dr. John Iliadis
+                Dr. John ILIADIS
               </a>
               <span className="bs-byline__dot" aria-hidden="true">
                 ·

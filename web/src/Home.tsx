@@ -7,15 +7,16 @@ export default function Home({ health }: { health: Health | null }) {
       <section className="bs-hero">
         <div className="bs-hero__inner">
           <div>
-            {/* The full lockup, as on the brand sheet. The <h1> below is the
-                page's statement, so this image is the identity, not a heading:
-                alt text names the product and nothing is duplicated as text. */}
+            {/* The explainer render (pics-source/boardsim2, served as webp):
+                a critical incident flowing into one decision, its consequences
+                and the board outcome. The <h1> below is the page's statement,
+                so the image describes itself and the header keeps the mark. */}
             <img
-              className="bs-brand-lockup"
-              src="/app/boardsim-logo.svg"
-              alt="BoardSim"
-              width={320}
-              height={88}
+              className="bs-hero-image"
+              src="/app/boardsim-hero.webp"
+              alt="BoardSim — executive cyber decision simulation: a critical cyber incident scenario flows into one executive decision, with simulated consequences and a board outcome"
+              width={600}
+              height={400}
             />
             <h1>Executive Decision-Making Under Pressure</h1>
             <p className="bs-hero__copy">
