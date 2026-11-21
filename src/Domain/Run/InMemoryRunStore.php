@@ -10,7 +10,7 @@ namespace BoardSim\Domain\Run;
  * This exists because the development machine has no MySQL server, and because a
  * service tested only through its production adapter is tested late. The service
  * is exercised against this store with the same call sequence the HTTP layer
- * uses, so the state machine, idempotency and hash chain are verified here.
+ * uses, so the state machine, duplicate-key behavior and event-link hash chain are exercised here.
  */
 final class InMemoryRunStore implements RunStore
 {
@@ -25,6 +25,37 @@ final class InMemoryRunStore implements RunStore
 
     /** @var array<string, array<string, string>> */
     private array $bundles = [];
+
+    private bool $inTransaction = false;
+
+    private bool $failNextUpdateForTest = false;
+
+    public function transaction(callable $operation): mixed
+    {
+        if ($this->inTransaction) {
+            return $operation();
+        }
+
+        $snapshot = [$this->runs, $this->events, $this->board, $this->bundles];
+        $this->inTransaction = true;
+
+        try {
+            $result = $operation();
+            $this->inTransaction = false;
+
+            return $result;
+        } catch (\Throwable $e) {
+            [$this->runs, $this->events, $this->board, $this->bundles] = $snapshot;
+            $this->inTransaction = false;
+
+            throw $e;
+        }
+    }
+
+    public function findForUpdate(string $runId): ?array
+    {
+        return $this->find($runId);
+    }
 
     public function create(array $run): void
     {
@@ -45,6 +76,12 @@ final class InMemoryRunStore implements RunStore
 
     public function update(array $run): void
     {
+        if ($this->failNextUpdateForTest) {
+            $this->failNextUpdateForTest = false;
+
+            throw new \RuntimeException('Injected run update failure');
+        }
+
         $this->runs[(string) $run['run_id']] = $run;
     }
 
@@ -145,6 +182,32 @@ final class InMemoryRunStore implements RunStore
         }
 
         throw new \RuntimeException("No event {$sequence} in run {$runId}");
+    }
+
+    /** Test-only helper: mutate a persisted run row without recomputing its hash. */
+    public function tamperRunForTest(string $runId, string $field, mixed $value): void
+    {
+        if (!isset($this->runs[$runId])) {
+            throw new \RuntimeException("No run {$runId}");
+        }
+
+        $this->runs[$runId][$field] = $value;
+    }
+
+    /** Test-only helper: mutate board evidence without recomputing board_sha256. */
+    public function tamperBoardForTest(string $runId, string $field, string $value): void
+    {
+        if (!isset($this->board[$runId])) {
+            throw new \RuntimeException("No board selections for run {$runId}");
+        }
+
+        $this->board[$runId][$field] = $value;
+    }
+
+    /** Test-only helper: prove service transactions roll back late failures. */
+    public function failNextUpdateForTest(): void
+    {
+        $this->failNextUpdateForTest = true;
     }
 
     /**

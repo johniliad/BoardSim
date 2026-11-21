@@ -6,12 +6,16 @@ namespace BoardSim\Domain\Run;
 
 use BoardSim\Content\BundleSeeder;
 use BoardSim\Content\CanonicalJson;
+use BoardSim\Content\EvidenceJson;
+use BoardSim\Content\PinnedScenarios;
+use BoardSim\Content\ScoringPolicyLoader;
 use BoardSim\Content\Glossary;
 use BoardSim\Domain\Regulation\FactSet;
 use BoardSim\Domain\Regulation\GuardResolver;
 use BoardSim\Domain\Regulation\RegulatoryEvaluator;
 use BoardSim\Domain\Regulation\RegulatoryStatus;
 use BoardSim\Domain\Scoring\Dimension;
+use BoardSim\Domain\Scoring\DimensionComparison;
 use BoardSim\Domain\Scoring\FiringBuilder;
 use BoardSim\Domain\Scoring\OptionLookup;
 use BoardSim\Infrastructure\Release;
@@ -19,13 +23,15 @@ use BoardSim\Infrastructure\Release;
 /**
  * Server-authoritative run orchestration.
  *
- * Everything that determines a score happens here, on the server, from pinned
- * inputs. The client only ever submits a choice id and an idempotency key.
+ * Everything that determines a score happens here, on the server. Run-specific
+ * operations require every release pin to match the loaded deployment; a historical
+ * run is never silently interpreted through different artifacts.
  *
- * A run pins four hashes at creation and never re-derives them:
+ * A run pins five hashes at creation and never re-derives them:
  *   policy_sha256             scoring ruleset + weights + board rubric
  *   regulatory_bundle_sha256  instruments, predicates, facts, guards
  *   content_sha256            scenario versions + option-to-rule remaps
+ *   difficulty_views_sha256   difficulty projection + board-field selection
  *   state_sha256              chained state, recomputed on every transition
  */
 final class RunService
@@ -40,6 +46,9 @@ final class RunService
     private readonly \BoardSim\Content\BoardChallenges $challenges;
     private readonly \BoardSim\Content\RetentionPolicy $retention;
     private readonly \BoardSim\Domain\Share\ShareStore $shareStore;
+
+    /** @var array<string, self> */
+    private array $releaseContexts = [];
 
     /**
      * @param array<string, mixed> $regulatory OverlayLoader::load()
@@ -159,6 +168,8 @@ final class RunService
             'regulatory_bundle_sha256' => $this->regulatory['bundle_sha256'],
             'content_version' => $this->contentVersion,
             'content_sha256' => $this->contentSha256,
+            'difficulty_views_version' => $this->views->version(),
+            'difficulty_views_sha256' => $this->views->sha256(),
             'scenarios' => count($this->content),
             'integrity_controls' => $this->integrityControls,
             'deployment' => $deployment,
@@ -190,13 +201,13 @@ final class RunService
      */
     public function create(array $input): array
     {
-        $scenarioId = (string) ($input['scenario_id'] ?? '');
+        $scenarioId = InputValidator::scenarioId($input['scenario_id'] ?? null);
 
         if (!isset($this->content[$scenarioId])) {
             throw DomainError::notFound('Scenario', $scenarioId);
         }
 
-        $difficulty = (string) ($input['difficulty'] ?? 'leadership');
+        $difficulty = InputValidator::difficulty($input['difficulty'] ?? null);
 
         // Difficulty is a projection, not a story. An unavailable view is a 422
         // with the reason from the policy, so the client and the copy cannot drift.
@@ -210,23 +221,19 @@ final class RunService
             throw DomainError::unsupported((string) ($view['unavailable_reason'] ?? 'Unavailable'));
         }
 
-        $appetite = (string) ($input['risk_appetite'] ?? 'balanced');
+        $appetite = InputValidator::riskAppetite($input['risk_appetite'] ?? null);
 
         if (!array_key_exists($appetite, $this->policy['appetite'])) {
             throw DomainError::invalid("Unknown risk appetite '{$appetite}'");
         }
 
-        $persona = (string) ($input['board_persona'] ?? 'balanced');
+        $persona = InputValidator::boardPersona($input['board_persona'] ?? null);
 
         if (!in_array($persona, $this->policy['personas'], true)) {
             throw DomainError::invalid("Unknown board persona '{$persona}'");
         }
 
-        $date = (string) ($input['date_of_simulation'] ?? gmdate('Y-m-d'));
-
-        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) !== 1) {
-            throw DomainError::invalid('date_of_simulation must be YYYY-MM-DD');
-        }
+        $date = InputValidator::simulationDate($input['date_of_simulation'] ?? null, gmdate('Y-m-d'));
 
         $run = [
             'run_id' => self::uuid4(),
@@ -237,6 +244,8 @@ final class RunService
             'regulatory_bundle_sha256' => (string) $this->regulatory['bundle_sha256'],
             'content_version' => $this->contentVersion,
             'content_sha256' => $this->contentSha256,
+            'difficulty_views_version' => $this->views->version(),
+            'difficulty_views_sha256' => $this->views->sha256(),
             'difficulty' => $difficulty,
             'risk_appetite' => $appetite,
             'board_persona' => $persona,
@@ -246,22 +255,24 @@ final class RunService
             'state_sha256' => self::GENESIS,
             'score' => null,
             'dimensions' => [],
+            'board_sha256' => null,
             'created_at' => gmdate('Y-m-d\TH:i:s\Z'),
             'finalized_at' => null,
         ];
 
         $run['state_sha256'] = $this->stateHash($run);
 
-        // Bundles first: runs.policy_sha256 has a foreign key to
-        // content_bundles.bundle_sha256, so creating the run before recording the
-        // bundle it pins fails on a fresh database with SQLSTATE[23000] 1452.
-        $this->pinBundles();
-        $this->store->create($run);
-
-        $run = $this->transition($run, RunState::ProfileLocked);
+        $run = $this->transition($run, RunState::ProfileLocked, false);
         $run['current_stage'] = 'S1';
+        $run = $this->transition($run, RunState::Stage1Open, false);
 
-        $run = $this->transition($run, RunState::Stage1Open);
+        $this->store->transaction(function () use ($run): void {
+            // Bundles first: runs.policy_sha256 has a foreign key to
+            // content_bundles.bundle_sha256, so creating the run before recording
+            // the bundle it pins fails on a fresh database.
+            $this->pinBundles();
+            $this->store->create($run);
+        });
 
         return $this->runView($run);
     }
@@ -274,82 +285,118 @@ final class RunService
      */
     public function decide(string $runId, string $key, string $stageId, string $choiceId): array
     {
-        $run = $this->requireRun($runId);
+        $runId = InputValidator::runId($runId);
+        $key = InputValidator::idempotencyKey($key);
+        $stageId = InputValidator::stageId($stageId);
+        $choiceId = InputValidator::choiceId($choiceId);
 
-        if ($key === '') {
-            throw DomainError::invalid('idempotency_key is required');
+        $context = $this->contextForRunId($runId);
+
+        if ($context !== $this) {
+            return $context->decide($runId, $key, $stageId, $choiceId);
         }
 
-        $existing = $this->store->eventByIdempotencyKey($runId, $key);
+        return $this->store->transaction(function () use ($runId, $key, $stageId, $choiceId): array {
+            $run = $this->store->findForUpdate($runId);
 
-        if ($existing !== null) {
-            return [
-                'replayed' => true,
-                'event' => $existing,
-                'run' => $this->runView($run),
+            if ($run === null) {
+                throw DomainError::notFound('Run', $runId);
+            }
+
+            $this->assertCompatibleRelease($run);
+
+            $requestSha256 = $this->decisionRequestHash($runId, $stageId, $choiceId);
+
+            // Check idempotency only after the row lock is held. A retry that
+            // waited behind the original request then observes both its event and
+            // the committed post-decision run state.
+            $existing = $this->store->eventByIdempotencyKey($runId, $key);
+
+            if ($existing !== null) {
+                if (!hash_equals((string) ($existing['request_sha256'] ?? ''), $requestSha256)) {
+                    throw DomainError::conflict(
+                        'The idempotency key was already used for a different decision payload'
+                    );
+                }
+
+                return [
+                    'replayed' => true,
+                    'event' => $existing,
+                    'run' => $this->runView($run),
+                ];
+            }
+
+            $expected = RunState::openFor($stageId);
+
+            if ($run['state'] !== $expected->value) {
+                throw DomainError::conflict(
+                    "Stage {$stageId} is not open; run is in {$run['state']}"
+                );
+            }
+
+            if ($run['current_stage'] !== $stageId) {
+                throw DomainError::conflict("Run is at {$run['current_stage']}, not {$stageId}");
+            }
+
+            // Validate the choice before the scoring layer sees it, so an unknown
+            // option becomes a 400 rather than escaping as an internal error.
+            $option = $this->option($run['scenario_id'], $stageId, $choiceId);
+
+            $statuses = $this->statuses($run, $stageId);
+            $decision = $this->builder->forDecision($run['scenario_id'], $stageId, $choiceId, $statuses);
+
+            $ruleIds = array_map(static fn (array $firing): string => $firing['rule']->id, $decision['firings']);
+            $events = $this->store->events($runId);
+            $sequence = count($events) + 1;
+            $prev = $events === [] ? self::GENESIS : (string) $events[count($events) - 1]['event_sha256'];
+            $pre = (string) $run['state_sha256'];
+
+            $event = [
+                'run_id' => $runId,
+                'sequence' => $sequence,
+                'idempotency_key' => $key,
+                'request_sha256' => $requestSha256,
+                'stage_id' => $stageId,
+                'option_id' => $choiceId,
+                'option_label' => (string) ($option['label'] ?? ''),
+                'effects' => (array) ($option['effects'] ?? []),
+                'content_sha256' => (string) $run['content_sha256'],
+                'rule_ids' => $ruleIds,
+                'metric_delta' => $this->sumDeltas($decision['firings'], $run['risk_appetite']),
+                'suppressed' => $decision['suppressed'],
+                'visible_fact_ids' => $this->factIds($run, $stageId),
+                'unknown_fact_ids' => $this->unknownFactIds($run, $stageId),
+                'regulatory_status' => $this->statusSnapshot($statuses),
+                'prev_event_sha256' => $prev,
+                'pre_state_sha256' => $pre,
+                'recorded_at' => gmdate('Y-m-d\TH:i:s\Z'),
             ];
-        }
 
-        $expected = RunState::openFor($stageId);
-
-        if ($run['state'] !== $expected->value) {
-            throw DomainError::conflict(
-                "Stage {$stageId} is not open; run is in {$run['state']}"
+            // Intermediate states are part of the state machine, but they are not
+            // independently durable. Persisting only the final state keeps the run
+            // and its event indivisible if any later write fails.
+            $run = $this->transition($run, $expected->advance(), false);
+            $next = $this->nextStage($stageId);
+            $run['current_stage'] = $next;
+            $run = $this->transition(
+                $run,
+                $next === null ? RunState::BoardOpen : RunState::openFor($next),
+                false
             );
-        }
 
-        if ($run['current_stage'] !== $stageId) {
-            throw DomainError::conflict("Run is at {$run['current_stage']}, not {$stageId}");
-        }
+            $event['post_state_sha256'] = (string) $run['state_sha256'];
+            $event['event_sha256'] = $this->eventHash($event);
 
-        // Validate the choice before the scoring layer sees it, so an unknown
-        // option becomes a 400 rather than escaping as an internal error.
-        $option = $this->option($run['scenario_id'], $stageId, $choiceId);
+            $this->store->appendEvent($event);
+            $this->store->update($run);
 
-        $statuses = $this->statuses($run, $stageId);
-        $decision = $this->builder->forDecision($run['scenario_id'], $stageId, $choiceId, $statuses);
-
-        $ruleIds = array_map(static fn (array $firing): string => $firing['rule']->id, $decision['firings']);
-        $events = $this->store->events($runId);
-        $sequence = count($events) + 1;
-        $prev = $events === [] ? self::GENESIS : (string) $events[count($events) - 1]['event_sha256'];
-        $pre = (string) $run['state_sha256'];
-
-        $event = [
-            'run_id' => $runId,
-            'sequence' => $sequence,
-            'idempotency_key' => $key,
-            'stage_id' => $stageId,
-            'option_id' => $choiceId,
-            'rule_ids' => $ruleIds,
-            'metric_delta' => $this->sumDeltas($decision['firings'], $run['risk_appetite']),
-            'suppressed' => $decision['suppressed'],
-            'visible_fact_ids' => $this->factIds($run, $stageId),
-            'unknown_fact_ids' => $this->unknownFactIds($run, $stageId),
-            'regulatory_status' => $this->statusSnapshot($statuses),
-            'prev_event_sha256' => $prev,
-            'pre_state_sha256' => $pre,
-            'recorded_at' => gmdate('Y-m-d\TH:i:s\Z'),
-        ];
-
-        $run = $this->transition($run, $expected->advance());
-        $next = $this->nextStage($stageId);
-        $run['current_stage'] = $next;
-        $run = $this->transition(
-            $run,
-            $next === null ? RunState::BoardOpen : RunState::openFor($next)
-        );
-
-        $event['post_state_sha256'] = (string) $run['state_sha256'];
-        $event['event_sha256'] = $this->eventHash($event);
-        $this->store->appendEvent($event);
-
-        return [
-            'replayed' => false,
-            'event' => $event,
-            'run' => $this->runView($run),
-            'consequence' => $option['effects'] ?? [],
-        ];
+            return [
+                'replayed' => false,
+                'event' => $event,
+                'run' => $this->runView($run),
+                'consequence' => $option['effects'] ?? [],
+            ];
+        });
     }
 
     /**
@@ -362,47 +409,66 @@ final class RunService
      */
     public function board(string $runId, array $selections): array
     {
-        $run = $this->requireRun($runId);
+        $runId = InputValidator::runId($runId);
+        $selections = InputValidator::boardSelections($selections);
 
-        if ($run['state'] !== RunState::BoardOpen->value) {
-            throw DomainError::conflict("Board pack is not open; run is in {$run['state']}");
+        $context = $this->contextForRunId($runId);
+
+        if ($context !== $this) {
+            return $context->board($runId, $selections);
         }
 
-        // Only the fields this difficulty collects may fire. Scoring an executive
-        // run against all seven board rules would silently inflate it.
-        $fields = $this->views->filterFields((string) $run['difficulty'], $this->policy['board_fields']);
+        return $this->store->transaction(function () use ($runId, $selections): array {
+            $run = $this->store->findForUpdate($runId);
 
-        try {
-            $boardResult = $this->builder->forBoard($selections, $fields);
-        } catch (DomainError $e) {
-            throw $e;
-        } catch (\RuntimeException $e) {
-            // Missing or unknown selections are a client error, not a fault.
-            throw DomainError::invalid($e->getMessage());
-        }
+            if ($run === null) {
+                throw DomainError::notFound('Run', $runId);
+            }
 
-        $this->store->saveBoard($runId, $selections);
+            $this->assertCompatibleRelease($run);
 
-        $result = $this->policy['calculator']->calculate(
-            $this->reconstructFirings($runId, $boardResult['firings']),
-            $run['risk_appetite']
-        );
+            if ($run['state'] !== RunState::BoardOpen->value) {
+                throw DomainError::conflict("Board pack is not open; run is in {$run['state']}");
+            }
 
-        $run['score'] = (int) $result['score'];
-        $run['dimensions'] = $result['dimensions'];
-        $run = $this->transition($run, RunState::BoardLocked);
-        $run['current_stage'] = null;
-        $run = $this->transition($run, RunState::Scored);
-        $run['finalized_at'] = gmdate('Y-m-d\TH:i:s\Z');
-        $run = $this->transition($run, RunState::Finalized);
+            // Only the fields this difficulty collects may fire. Scoring an executive
+            // run against all seven board rules would silently inflate it.
+            $fields = $this->views->filterFields((string) $run['difficulty'], $this->policy['board_fields']);
 
-        return [
-            'run' => $this->runView($run),
-            'score' => $run['score'],
-            'label' => (string) $result['label'],
-            'dimensions' => $run['dimensions'],
-            'declined' => $boardResult['declined'],
-        ];
+            try {
+                $boardResult = $this->builder->forBoard($selections, $fields);
+            } catch (DomainError $e) {
+                throw $e;
+            } catch (\RuntimeException $e) {
+                // Missing or unknown selections are a client error, not a fault.
+                throw DomainError::invalid($e->getMessage());
+            }
+
+            $result = $this->policy['calculator']->calculate(
+                $this->reconstructFirings($runId, $boardResult['firings']),
+                $run['risk_appetite']
+            );
+
+            $run['score'] = (int) $result['score'];
+            $run['dimensions'] = $result['dimensions'];
+            $run['board_sha256'] = CanonicalJson::sha256($selections);
+            $run = $this->transition($run, RunState::BoardLocked, false);
+            $run['current_stage'] = null;
+            $run = $this->transition($run, RunState::Scored, false);
+            $run['finalized_at'] = gmdate('Y-m-d\TH:i:s\Z');
+            $run = $this->transition($run, RunState::Finalized, false);
+
+            $this->store->saveBoard($runId, $selections);
+            $this->store->update($run);
+
+            return [
+                'run' => $this->runView($run),
+                'score' => $run['score'],
+                'label' => (string) $result['label'],
+                'dimensions' => $run['dimensions'],
+                'declined' => $boardResult['declined'],
+            ];
+        });
     }
 
     /**
@@ -413,6 +479,12 @@ final class RunService
      */
     public function explain(string $runId): array
     {
+        $context = $this->contextForRunId($runId);
+
+        if ($context !== $this) {
+            return $context->explain($runId);
+        }
+
         $run = $this->requireRun($runId);
 
         if (!in_array($run['state'], [RunState::Scored->value, RunState::Finalized->value], true)) {
@@ -426,6 +498,7 @@ final class RunService
             $this->reconstructFirings($runId, $boardResult['firings']),
             $run['risk_appetite']
         );
+        $scoreVerification = $this->scoreVerification($run, $result);
         $events = $this->store->events($runId);
 
         return [
@@ -435,10 +508,16 @@ final class RunService
             // these keys directly, so they are emitted alongside the richer ones
             // rather than left for the client to derive.
             'scenario' => (string) $run['scenario_id'],
-            'ruleset_version' => (string) $this->policy['ruleset_version'],
+            'ruleset_version' => (string) $run['ruleset_version'],
             'weighted_numerator' => (int) $result['numerator'],
             'rounding_expression' => sprintf('floor((%d+50)/100)', (int) $result['numerator']),
-            'score' => (int) $result['score'],
+            'score' => (int) $run['score'],
+            'stored_score' => (int) $run['score'],
+            'reconstructed_score' => (int) $result['score'],
+            'stored_dimensions' => (array) $run['dimensions'],
+            'reconstructed_dimensions' => (array) $result['dimensions'],
+            'score_verified' => $scoreVerification['verified'],
+            'score_verification' => $scoreVerification,
             'label' => (string) $result['label'],
             'dimensions' => $result['dimensions'],
             'weights' => $result['weights'],
@@ -451,7 +530,7 @@ final class RunService
             // authored `effects` the player saw at decision time. 05 asks the
             // explanation to repeat them rather than leave the reader to
             // reconstruct what the choice actually did.
-            'consequences' => $this->consequences($run, $events),
+            'consequences' => $this->consequences($events),
             'legal' => [
                 'assessment' => 'A separate applicability assessment. It never alters the score.',
                 'instruments' => $this->legalPanel($run),
@@ -481,44 +560,26 @@ final class RunService
     /**
      * The consequences of each recorded decision, as authored.
      *
-     * Read from the scenario content, not from the event log: the event stores
-     * what the scoring rules moved, while `effects` is an explicitly
-     * non-scoring teaching ledger (02_SCORING_MODEL.md). Quoting the authored
-     * effects therefore cannot disagree with the score — it never contributed
-     * to it.
+     * Read from the immutable event snapshot rather than the currently deployed
+     * scenario content. `effects` is an explicitly non-scoring teaching ledger
+     * (02_SCORING_MODEL.md), but snapshotting and hashing it preserves exactly
+     * what accompanied the recorded choice.
      *
      * @param array<string, mixed> $run
      * @param list<array<string, mixed>> $events
      *
      * @return list<array<string, mixed>>
      */
-    private function consequences(array $run, array $events): array
+    private function consequences(array $events): array
     {
-        $scenario = $this->content[(string) ($run['scenario_id'] ?? '')] ?? [];
-        $stages = [];
-
-        foreach ((array) ($scenario['stages'] ?? []) as $stage) {
-            $stages[(string) ($stage['id'] ?? '')] = $stage;
-        }
-
         $out = [];
 
         foreach ($events as $event) {
-            $stage = $stages[(string) ($event['stage_id'] ?? '')] ?? null;
-            $option = null;
-
-            foreach ((array) ($stage['options'] ?? []) as $candidate) {
-                if ((string) ($candidate['id'] ?? '') === (string) ($event['option_id'] ?? '')) {
-                    $option = $candidate;
-                    break;
-                }
-            }
-
             $out[] = [
                 'stage_id' => (string) ($event['stage_id'] ?? ''),
                 'option_id' => (string) ($event['option_id'] ?? ''),
-                'decision' => $option === null ? '' : (string) ($option['label'] ?? ''),
-                'effects' => $option === null ? [] : (array) ($option['effects'] ?? []),
+                'decision' => (string) ($event['option_label'] ?? ''),
+                'effects' => (array) ($event['effects'] ?? []),
                 'regulatory_status' => $event['regulatory_status'] ?? [],
             ];
         }
@@ -529,18 +590,23 @@ final class RunService
     /**
      * "What would change it?" — the exact effect of each unchosen option.
      *
-     * Computed by substitution and full replay on the pinned scenario, never by
+     * Computed by substitution and full replay on the release matching the run, never by
      * back-solving from the outcome. Nothing here is persisted, and no rule id or
      * delta is guessed: both come from the same builder that scored the run.
      *
-     * Only the option is substituted. The policy is immutable per run, so a
-     * different weight or delta is a different ruleset version, not a
-     * counterfactual — see 03_DECISION_RULES.md.
+     * Only the option is substituted. A release mismatch is rejected before this
+     * method runs, so alternatives are never calculated against different artifacts.
      *
      * @return array<string, mixed>
      */
     public function counterfactuals(string $runId): array
     {
+        $context = $this->contextForRunId($runId);
+
+        if ($context !== $this) {
+            return $context->counterfactuals($runId);
+        }
+
         $run = $this->requireRun($runId);
 
         if (!in_array($run['state'], [RunState::Scored->value, RunState::Finalized->value], true)) {
@@ -682,7 +748,7 @@ final class RunService
             'dimensions' => $run['dimensions'],
             'stages' => $stagesOut,
             'note' => 'Alternatives substitute one authored option and replay the whole run against the '
-                . 'same pinned policy. Policy changes are a separate ruleset version, not a '
+                . 'policy currently loaded by this deployment. Policy changes are a separate ruleset version, but '
                 . 'counterfactual. A later outcome never implies the original choice was wrong.',
             'governance' => [
                 'source_kind' => 'SIMULATION_ASSUMPTION',
@@ -856,7 +922,14 @@ final class RunService
      */
     public function delete(string $runId): array
     {
-        $run = $this->requireRun($runId);
+        // Erasure must remain available even when the run's historical release is
+        // unavailable; release compatibility protects interpretation, not deletion.
+        $runId = InputValidator::runId($runId);
+        $run = $this->store->find($runId);
+
+        if ($run === null) {
+            throw DomainError::notFound('Run', $runId);
+        }
         $events = $this->store->delete($runId);
 
         return [
@@ -886,7 +959,10 @@ final class RunService
      */
     public function demoDecide(string $stageId, string $choiceId): array
     {
-        return $this->demo()->decide($stageId, $choiceId);
+        return $this->demo()->decide(
+            InputValidator::stageId($stageId),
+            InputValidator::choiceId($choiceId)
+        );
     }
 
     private function demo(): \BoardSim\Domain\Demo\DemoService
@@ -929,8 +1005,17 @@ final class RunService
      */
     public function verifyChain(string $runId): array
     {
+        $context = $this->contextForRunId($runId);
+
+        if ($context !== $this) {
+            return $context->verifyChain($runId);
+        }
+
+        $run = $this->requireRun($runId);
+        $runId = (string) $run['run_id'];
         $events = $this->store->events($runId);
         $previous = self::GENESIS;
+        $previousPostState = null;
 
         foreach ($events as $index => $event) {
             if ((string) $event['prev_event_sha256'] !== $previous) {
@@ -941,10 +1026,54 @@ final class RunService
                 return ['ok' => false, 'broken_at' => $index + 1, 'reason' => 'event_sha256 mismatch'];
             }
 
+            if ($previousPostState !== null && (string) $event['pre_state_sha256'] !== $previousPostState) {
+                return ['ok' => false, 'broken_at' => $index + 1, 'reason' => 'state transition mismatch'];
+            }
+
             $previous = (string) $event['event_sha256'];
+            $previousPostState = (string) $event['post_state_sha256'];
         }
 
-        return ['ok' => true, 'events' => count($events), 'head' => $previous];
+        if (!hash_equals((string) $run['state_sha256'], $this->stateHash($run))) {
+            return ['ok' => false, 'broken_at' => null, 'reason' => 'run state_sha256 mismatch'];
+        }
+
+        if (in_array($run['state'], [RunState::Scored->value, RunState::Finalized->value], true)) {
+            $boardSha256 = CanonicalJson::sha256($this->store->boardSelections($runId));
+
+            if (!hash_equals((string) ($run['board_sha256'] ?? ''), $boardSha256)) {
+                return ['ok' => false, 'broken_at' => null, 'reason' => 'board selections hash mismatch'];
+            }
+        }
+
+        $scoreVerified = null;
+
+        if (in_array($run['state'], [RunState::Scored->value, RunState::Finalized->value], true)) {
+            $verification = $this->reconstructedScoreVerification($run);
+            $scoreVerified = $verification['verified'];
+
+            if (!$scoreVerified) {
+                $reason = !$verification['score_matches']
+                    ? 'stored score reconstruction mismatch'
+                    : 'stored dimension reconstruction mismatch';
+
+                return [
+                    'ok' => false,
+                    'broken_at' => null,
+                    'reason' => $reason,
+                    'score_verified' => false,
+                    'score_verification' => $verification,
+                ];
+            }
+        }
+
+        return [
+            'ok' => true,
+            'events' => count($events),
+            'head' => $previous,
+            'run_state_verified' => true,
+            'score_verified' => $scoreVerified,
+        ];
     }
 
     /**
@@ -952,11 +1081,14 @@ final class RunService
      */
     private function requireRun(string $runId): array
     {
+        $runId = InputValidator::runId($runId);
         $run = $this->store->find($runId);
 
         if ($run === null) {
             throw DomainError::notFound('Run', $runId);
         }
+
+        $this->assertCompatibleRelease($run);
 
         return $run;
     }
@@ -966,11 +1098,14 @@ final class RunService
      *
      * @return array<string, mixed>
      */
-    private function transition(array $run, RunState $to): array
+    private function transition(array $run, RunState $to, bool $persist = true): array
     {
         $run['state'] = $to->value;
         $run['state_sha256'] = $this->stateHash($run);
-        $this->store->update($run);
+
+        if ($persist) {
+            $this->store->update($run);
+        }
 
         return $run;
     }
@@ -982,10 +1117,24 @@ final class RunService
     {
         return CanonicalJson::sha256([
             'run_id' => $run['run_id'],
+            'scenario_id' => $run['scenario_id'],
+            'scenario_version' => $run['scenario_version'],
+            'ruleset_version' => $run['ruleset_version'],
+            'policy_sha256' => $run['policy_sha256'],
+            'regulatory_bundle_sha256' => $run['regulatory_bundle_sha256'],
+            'content_version' => $run['content_version'],
+            'content_sha256' => $run['content_sha256'],
+            'difficulty_views_version' => $run['difficulty_views_version'],
+            'difficulty_views_sha256' => $run['difficulty_views_sha256'],
+            'difficulty' => $run['difficulty'],
+            'risk_appetite' => $run['risk_appetite'],
+            'board_persona' => $run['board_persona'],
+            'date_of_simulation' => $run['date_of_simulation'],
             'state' => $run['state'],
             'current_stage' => $run['current_stage'],
             'score' => $run['score'],
             'dimensions' => $run['dimensions'],
+            'board_sha256' => $run['board_sha256'] ?? null,
         ]);
     }
 
@@ -997,15 +1146,23 @@ final class RunService
         return CanonicalJson::sha256([
             'run_id' => $event['run_id'],
             'sequence' => $event['sequence'],
+            'idempotency_key' => $event['idempotency_key'],
+            'request_sha256' => $event['request_sha256'],
             'stage_id' => $event['stage_id'],
             'option_id' => $event['option_id'],
+            'option_label' => $event['option_label'],
+            'effects_json' => EvidenceJson::encode((array) $event['effects']),
+            'content_sha256' => $event['content_sha256'],
             'rule_ids' => array_values(array_map('strval', (array) $event['rule_ids'])),
             'metric_delta' => $event['metric_delta'],
+            'suppressed' => $event['suppressed'],
+            'regulatory_status' => $event['regulatory_status'],
             'prev_event_sha256' => $event['prev_event_sha256'],
             'pre_state_sha256' => $event['pre_state_sha256'],
             'post_state_sha256' => $event['post_state_sha256'],
             'visible_fact_ids' => array_values(array_map('strval', (array) $event['visible_fact_ids'])),
             'unknown_fact_ids' => array_values(array_map('strval', (array) $event['unknown_fact_ids'])),
+            'recorded_at' => $event['recorded_at'],
         ]);
     }
 
@@ -1083,10 +1240,13 @@ final class RunService
      */
     public function profile(array $runIds): array
     {
+        $runIds = InputValidator::runIdList($runIds);
+
         return (new \BoardSim\Domain\Profile\ProfileAggregator(
             $this->store,
             $this->content,
-            $this->retention->runRetentionDays()
+            $this->retention->runRetentionDays(),
+            fn (array $run): bool => $this->isResolvableRelease($run)
         ))->aggregate($runIds);
     }
 
@@ -1122,6 +1282,12 @@ final class RunService
      */
     public function status(string $runId): array
     {
+        $context = $this->contextForRunId($runId);
+
+        if ($context !== $this) {
+            return $context->status($runId);
+        }
+
         return $this->runView($this->requireRun($runId));
     }
 
@@ -1132,6 +1298,7 @@ final class RunService
      */
     public function reference(string $anchor): array
     {
+        $anchor = InputValidator::reference($anchor);
         $instrument = $this->regulatory['instruments'][$anchor] ?? null;
 
         if ($instrument === null) {
@@ -1168,6 +1335,8 @@ final class RunService
             'regulatory_bundle_sha256' => (string) $run['regulatory_bundle_sha256'],
             'content_version' => (string) $run['content_version'],
             'content_sha256' => (string) $run['content_sha256'],
+            'difficulty_views_version' => (string) ($run['difficulty_views_version'] ?? ''),
+            'difficulty_views_sha256' => (string) ($run['difficulty_views_sha256'] ?? ''),
             'scenario_id' => (string) $run['scenario_id'],
             'scenario_version' => (string) $run['scenario_version'],
         ];
@@ -1195,6 +1364,7 @@ final class RunService
             'score' => $run['score'],
             'dimensions' => $run['dimensions'],
             'state_sha256' => $run['state_sha256'],
+            'board_sha256' => $run['board_sha256'] ?? null,
         ];
 
         if (is_string($run['current_stage'])) {
@@ -1420,6 +1590,220 @@ final class RunService
         }
 
         return array_merge($firings, $extra);
+    }
+
+    /**
+     * Refuse to interpret a run through artifacts other than the ones it pins.
+     *
+     * @param array<string, mixed> $run
+     */
+    public function assertCompatibleRelease(array $run): void
+    {
+        $expected = [
+            'ruleset_version' => (string) $this->policy['ruleset_version'],
+            'policy_sha256' => (string) $this->policy['policy_sha256'],
+            'regulatory_bundle_sha256' => (string) $this->regulatory['bundle_sha256'],
+            'content_version' => $this->contentVersion,
+            'content_sha256' => $this->contentSha256,
+            'difficulty_views_version' => $this->views->version(),
+            'difficulty_views_sha256' => $this->views->sha256(),
+        ];
+
+        foreach ($expected as $field => $value) {
+            $actual = (string) ($run[$field] ?? '');
+
+            if ($actual === '' || !hash_equals($value, $actual)) {
+                throw DomainError::releaseUnavailable(
+                    "Run {$run['run_id']} pins {$field}=" . ($actual === '' ? '(missing)' : $actual)
+                    . "; this deployment provides {$value}"
+                );
+            }
+        }
+
+        $scenario = $this->content[(string) ($run['scenario_id'] ?? '')] ?? null;
+
+        if (!is_array($scenario) || (string) ($scenario['version'] ?? '') !== (string) $run['scenario_version']) {
+            throw DomainError::releaseUnavailable(
+                "Run {$run['run_id']} pins a scenario version unavailable on this deployment"
+            );
+        }
+    }
+
+    /** @param array<string, mixed> $run */
+    private function isCompatibleRelease(array $run): bool
+    {
+        try {
+            $this->assertCompatibleRelease($run);
+
+            return true;
+        } catch (DomainError $e) {
+            if ($e->errorCode === 'RUN_RELEASE_UNAVAILABLE') {
+                return false;
+            }
+
+            throw $e;
+        }
+    }
+
+    /** @param array<string, mixed> $run */
+    private function isResolvableRelease(array $run): bool
+    {
+        try {
+            $this->contextForRun($run);
+
+            return true;
+        } catch (DomainError $e) {
+            if ($e->errorCode === 'RUN_RELEASE_UNAVAILABLE') {
+                return false;
+            }
+
+            throw $e;
+        }
+    }
+
+    private function contextForRunId(string $runId): self
+    {
+        $runId = InputValidator::runId($runId);
+        $run = $this->store->find($runId);
+
+        if ($run === null) {
+            throw DomainError::notFound('Run', $runId);
+        }
+
+        return $this->contextForRun($run);
+    }
+
+    /**
+     * Resolve the exact artifacts pinned by a run. Policy and scenario-content
+     * versions retained in the repository are loaded by version and then verified
+     * by hash. Regulatory and difficulty artifacts are reused only when the active
+     * retained copies match the run exactly; otherwise interpretation fails closed.
+     *
+     * @param array<string, mixed> $run
+     */
+    private function contextForRun(array $run): self
+    {
+        if ($this->isCompatibleRelease($run)) {
+            return $this;
+        }
+
+        if ($this->projectRoot === null) {
+            throw DomainError::releaseUnavailable('Historical release loading requires a project root');
+        }
+
+        if (!hash_equals((string) $this->regulatory['bundle_sha256'], (string) ($run['regulatory_bundle_sha256'] ?? ''))) {
+            throw DomainError::releaseUnavailable(
+                "Run {$run['run_id']} requires regulatory artifacts not retained by this deployment"
+            );
+        }
+
+        $key = implode('|', [
+            (string) ($run['policy_sha256'] ?? ''),
+            (string) ($run['content_sha256'] ?? ''),
+            (string) ($run['regulatory_bundle_sha256'] ?? ''),
+            (string) ($run['difficulty_views_sha256'] ?? ''),
+        ]);
+
+        if (isset($this->releaseContexts[$key])) {
+            return $this->releaseContexts[$key];
+        }
+
+        try {
+            $policy = (new ScoringPolicyLoader($this->projectRoot))->load((string) $run['ruleset_version']);
+            $pinned = new PinnedScenarios($this->projectRoot, (string) $run['content_version']);
+            $content = $pinned->loadAll();
+            $views = \BoardSim\Content\DifficultyViews::load(
+                $this->projectRoot,
+                (string) $run['difficulty_views_version']
+            );
+        } catch (\Throwable $e) {
+            throw DomainError::releaseUnavailable(
+                "Run {$run['run_id']} requires historical artifacts that could not be loaded: {$e->getMessage()}"
+            );
+        }
+
+        if (!hash_equals((string) $run['policy_sha256'], (string) $policy['policy_sha256'])
+            || !hash_equals((string) $run['content_sha256'], $pinned->contentSha256())
+            || !hash_equals((string) $run['difficulty_views_sha256'], $views->sha256())
+        ) {
+            throw DomainError::releaseUnavailable(
+                "Run {$run['run_id']} historical artifact hashes do not match the retained release"
+            );
+        }
+
+        $context = new self(
+            $this->store,
+            $this->regulatory,
+            $policy,
+            $content,
+            $pinned->contentVersion(),
+            $pinned->contentSha256(),
+            $this->integrityControls,
+            $views,
+            $this->challenges,
+            $this->projectRoot,
+            $this->retention,
+            $this->shareStore
+        );
+        $context->assertCompatibleRelease($run);
+        $this->releaseContexts[$key] = $context;
+
+        return $context;
+    }
+
+    private function decisionRequestHash(string $runId, string $stageId, string $choiceId): string
+    {
+        return CanonicalJson::sha256([
+            'run_id' => $runId,
+            'stage_id' => $stageId,
+            'choice_id' => $choiceId,
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed> $run
+     */
+    private function reconstructedScoreVerification(array $run): array
+    {
+        $selections = $this->store->boardSelections((string) $run['run_id']);
+        $fields = $this->views->filterFields((string) $run['difficulty'], $this->policy['board_fields']);
+        $boardResult = $this->builder->forBoard($selections, $fields);
+        $result = $this->policy['calculator']->calculate(
+            $this->reconstructFirings((string) $run['run_id'], $boardResult['firings']),
+            (string) $run['risk_appetite']
+        );
+
+        return $this->scoreVerification($run, $result);
+    }
+
+    /**
+     * @param array<string, mixed> $run
+     * @param array<string, mixed> $result
+     *
+     * @return array<string, mixed>
+     */
+    private function scoreVerification(array $run, array $result): array
+    {
+        $dimensions = DimensionComparison::compare(
+            (array) ($run['dimensions'] ?? []),
+            (array) ($result['dimensions'] ?? [])
+        );
+        $scoreMatches = is_int($run['score'] ?? null)
+            && is_int($result['score'] ?? null)
+            && $run['score'] === $result['score'];
+
+        return [
+            'verified' => $scoreMatches && $dimensions['matches'],
+            'score_matches' => $scoreMatches,
+            'dimensions_match' => $dimensions['matches'],
+            'missing_from_stored' => $dimensions['missing_from_stored'],
+            'missing_from_reconstructed' => $dimensions['missing_from_reconstructed'],
+            'unexpected_in_stored' => $dimensions['unexpected_in_stored'],
+            'unexpected_in_reconstructed' => $dimensions['unexpected_in_reconstructed'],
+            'invalid_in_stored' => $dimensions['invalid_in_stored'],
+            'invalid_in_reconstructed' => $dimensions['invalid_in_reconstructed'],
+            'mismatched_dimensions' => $dimensions['mismatched_dimensions'],
+        ];
     }
 
     private function pinBundles(): void

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace BoardSim\Infrastructure;
 
 use BoardSim\Content\CanonicalJson;
+use BoardSim\Content\EvidenceJson;
 use BoardSim\Domain\Run\DomainError;
 use BoardSim\Domain\Run\RunStore;
 use BoardSim\Domain\Run\StoreDiagnostics;
@@ -31,6 +32,37 @@ final class MysqlRunStore implements RunStore, StoreDiagnostics
     {
     }
 
+    public function transaction(callable $operation): mixed
+    {
+        if ($this->pdo->inTransaction()) {
+            return $operation();
+        }
+
+        $this->pdo->beginTransaction();
+
+        try {
+            $result = $operation();
+            $this->pdo->commit();
+
+            return $result;
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+
+            throw $e;
+        }
+    }
+
+    public function findForUpdate(string $runId): ?array
+    {
+        $statement = $this->pdo->prepare('SELECT * FROM runs WHERE run_id = :run_id FOR UPDATE');
+        $statement->execute(['run_id' => $runId]);
+        $row = $statement->fetch(PDO::FETCH_ASSOC);
+
+        return is_array($row) ? $this->hydrateRun($row) : null;
+    }
+
     /**
      * Deployment status for `/v1/health`, not for the API contract.
      *
@@ -41,8 +73,35 @@ final class MysqlRunStore implements RunStore, StoreDiagnostics
      */
     public function describe(): array
     {
-        $required = ['content_bundles', 'runs', 'run_events', 'run_board', 'run_board_prose', 'share_tokens', 'rate_limits'];
-        $result = ['reachable' => true, 'schema' => 'unknown', 'applied' => [], 'error' => null];
+        $required = [
+            'content_bundles',
+            'runs',
+            'run_events',
+            'run_board',
+            'run_board_prose',
+            'share_tokens',
+            'rate_limits',
+            'schema_migrations',
+        ];
+        $requiredMigrations = [
+            '001_init.sql',
+            '002_events.sql',
+            '003_share_tokens.sql',
+            '004_rate_limits.sql',
+            '005_release_integrity.sql',
+        ];
+        $requiredColumns = [
+            'runs' => ['difficulty_views_version', 'difficulty_views_sha256', 'board_sha256'],
+            'run_events' => ['request_sha256', 'option_label', 'effects_json', 'content_sha256'],
+        ];
+        $result = [
+            'reachable' => true,
+            'schema' => 'unknown',
+            'applied' => [],
+            'missing_migrations' => [],
+            'missing_columns' => [],
+            'error' => null,
+        ];
 
         try {
             $present = array_map(
@@ -52,11 +111,9 @@ final class MysqlRunStore implements RunStore, StoreDiagnostics
 
             $missing = array_values(array_diff($required, $present));
 
-            if ($missing === []) {
-                $result['schema'] = 'ok';
-            } elseif (count($missing) === count($required)) {
+            if (count($missing) === count($required)) {
                 $result['schema'] = 'missing';
-            } else {
+            } elseif ($missing !== []) {
                 $result['schema'] = 'partial';
             }
 
@@ -66,6 +123,34 @@ final class MysqlRunStore implements RunStore, StoreDiagnostics
                     $this->pdo->query('SELECT migration FROM schema_migrations ORDER BY migration')
                         ->fetchAll(PDO::FETCH_COLUMN)
                 );
+
+                $result['missing_migrations'] = array_values(
+                    array_diff($requiredMigrations, $result['applied'])
+                );
+            }
+
+            foreach ($requiredColumns as $table => $columns) {
+                if (!in_array($table, $present, true)) {
+                    continue;
+                }
+
+                $found = array_map(
+                    'strval',
+                    $this->pdo->query('SHOW COLUMNS FROM `' . $table . '`')->fetchAll(PDO::FETCH_COLUMN)
+                );
+
+                foreach (array_diff($columns, $found) as $column) {
+                    $result['missing_columns'][] = $table . '.' . $column;
+                }
+            }
+
+            if ($missing === []
+                && $result['missing_migrations'] === []
+                && $result['missing_columns'] === []
+            ) {
+                $result['schema'] = 'ok';
+            } elseif ($result['schema'] !== 'missing') {
+                $result['schema'] = 'partial';
             }
         } catch (\Throwable $e) {
             error_log('BoardSim schema probe: ' . $e->getMessage());
@@ -104,12 +189,14 @@ final class MysqlRunStore implements RunStore, StoreDiagnostics
     {
         $sql = 'INSERT INTO runs (run_id, scenario_id, scenario_version, ruleset_version,
                     policy_sha256, regulatory_bundle_sha256, content_version, content_sha256,
+                    difficulty_views_version, difficulty_views_sha256,
                     difficulty, risk_appetite, board_persona, date_of_simulation,
-                    state, current_stage, state_sha256, score, dimensions, created_at)
+                    state, current_stage, state_sha256, score, dimensions, board_sha256, created_at, finalized_at)
                 VALUES (:run_id, :scenario_id, :scenario_version, :ruleset_version,
                     :policy_sha256, :regulatory_bundle_sha256, :content_version, :content_sha256,
+                    :difficulty_views_version, :difficulty_views_sha256,
                     :difficulty, :risk_appetite, :board_persona, :date_of_simulation,
-                    :state, :current_stage, :state_sha256, :score, :dimensions, :created_at)';
+                    :state, :current_stage, :state_sha256, :score, :dimensions, :board_sha256, :created_at, :finalized_at)';
 
         $this->pdo->prepare($sql)->execute([
             'run_id' => $run['run_id'],
@@ -120,6 +207,8 @@ final class MysqlRunStore implements RunStore, StoreDiagnostics
             'regulatory_bundle_sha256' => $run['regulatory_bundle_sha256'],
             'content_version' => $run['content_version'],
             'content_sha256' => $run['content_sha256'],
+            'difficulty_views_version' => $run['difficulty_views_version'],
+            'difficulty_views_sha256' => $run['difficulty_views_sha256'],
             'difficulty' => $run['difficulty'],
             'risk_appetite' => $run['risk_appetite'],
             'board_persona' => $run['board_persona'],
@@ -129,7 +218,11 @@ final class MysqlRunStore implements RunStore, StoreDiagnostics
             'state_sha256' => $run['state_sha256'],
             'score' => $run['score'],
             'dimensions' => CanonicalJson::encode((array) $run['dimensions']),
+            'board_sha256' => $run['board_sha256'],
             'created_at' => gmdate('Y-m-d H:i:s', strtotime((string) $run['created_at']) ?: time()),
+            'finalized_at' => $run['finalized_at'] === null
+                ? null
+                : gmdate('Y-m-d H:i:s', strtotime((string) $run['finalized_at']) ?: time()),
         ]);
     }
 
@@ -146,7 +239,7 @@ final class MysqlRunStore implements RunStore, StoreDiagnostics
     {
         $sql = 'UPDATE runs SET state = :state, current_stage = :current_stage,
                     state_sha256 = :state_sha256, score = :score, dimensions = :dimensions,
-                    finalized_at = :finalized_at
+                    board_sha256 = :board_sha256, finalized_at = :finalized_at
                 WHERE run_id = :run_id';
 
         $this->pdo->prepare($sql)->execute([
@@ -155,6 +248,7 @@ final class MysqlRunStore implements RunStore, StoreDiagnostics
             'state_sha256' => $run['state_sha256'],
             'score' => $run['score'],
             'dimensions' => CanonicalJson::encode((array) $run['dimensions']),
+            'board_sha256' => $run['board_sha256'] ?? null,
             'finalized_at' => $run['finalized_at'] === null
                 ? null
                 : gmdate('Y-m-d H:i:s', strtotime((string) $run['finalized_at']) ?: time()),
@@ -164,22 +258,28 @@ final class MysqlRunStore implements RunStore, StoreDiagnostics
 
     public function appendEvent(array $event): void
     {
-        $sql = 'INSERT INTO run_events (run_id, sequence, idempotency_key, stage_id, option_id,
+        $sql = 'INSERT INTO run_events (run_id, sequence, idempotency_key, request_sha256, stage_id, option_id,
+                    option_label, effects_json, content_sha256,
                     rule_ids, metric_delta, suppressed_json, visible_fact_ids, unknown_fact_ids,
                     regulatory_status, pre_state_sha256, post_state_sha256,
-                    prev_event_sha256, event_sha256)
-                VALUES (:run_id, :sequence, :idempotency_key, :stage_id, :option_id,
+                    prev_event_sha256, event_sha256, recorded_at)
+                VALUES (:run_id, :sequence, :idempotency_key, :request_sha256, :stage_id, :option_id,
+                    :option_label, :effects_json, :content_sha256,
                     :rule_ids, :metric_delta, :suppressed_json, :visible_fact_ids, :unknown_fact_ids,
                     :regulatory_status, :pre_state_sha256, :post_state_sha256,
-                    :prev_event_sha256, :event_sha256)';
+                    :prev_event_sha256, :event_sha256, :recorded_at)';
 
         try {
             $this->pdo->prepare($sql)->execute([
                 'run_id' => $event['run_id'],
                 'sequence' => $event['sequence'],
                 'idempotency_key' => $event['idempotency_key'],
+                'request_sha256' => $event['request_sha256'],
                 'stage_id' => $event['stage_id'],
                 'option_id' => $event['option_id'],
+                'option_label' => $event['option_label'],
+                'effects_json' => EvidenceJson::encode((array) $event['effects']),
+                'content_sha256' => $event['content_sha256'],
                 'rule_ids' => CanonicalJson::encode((array) $event['rule_ids']),
                 'metric_delta' => CanonicalJson::encode((array) $event['metric_delta']),
                 'suppressed_json' => CanonicalJson::encode((array) $event['suppressed']),
@@ -190,6 +290,7 @@ final class MysqlRunStore implements RunStore, StoreDiagnostics
                 'post_state_sha256' => $event['post_state_sha256'],
                 'prev_event_sha256' => $event['prev_event_sha256'],
                 'event_sha256' => $event['event_sha256'],
+                'recorded_at' => $event['recorded_at'],
             ]);
         } catch (\PDOException $e) {
             // 23000 = integrity constraint violation: the unique idempotency key
@@ -212,24 +313,7 @@ final class MysqlRunStore implements RunStore, StoreDiagnostics
         $events = [];
 
         foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            $events[] = [
-                'run_id' => (string) $row['run_id'],
-                'sequence' => (int) $row['sequence'],
-                'idempotency_key' => (string) $row['idempotency_key'],
-                'stage_id' => (string) $row['stage_id'],
-                'option_id' => (string) $row['option_id'],
-                'rule_ids' => $this->decodeList($row['rule_ids']),
-                'metric_delta' => $this->decodeMap($row['metric_delta']),
-                'suppressed' => $this->decodeList($row['suppressed_json']),
-                'visible_fact_ids' => $this->decodeList($row['visible_fact_ids']),
-                'unknown_fact_ids' => $this->decodeList($row['unknown_fact_ids']),
-                'regulatory_status' => $this->decodeMap($row['regulatory_status']),
-                'pre_state_sha256' => (string) $row['pre_state_sha256'],
-                'post_state_sha256' => (string) $row['post_state_sha256'],
-                'prev_event_sha256' => (string) $row['prev_event_sha256'],
-                'event_sha256' => (string) $row['event_sha256'],
-                'recorded_at' => (string) $row['recorded_at'],
-            ];
+            $events[] = $this->hydrateEvent($row);
         }
 
         return $events;
@@ -237,13 +321,13 @@ final class MysqlRunStore implements RunStore, StoreDiagnostics
 
     public function eventByIdempotencyKey(string $runId, string $key): ?array
     {
-        foreach ($this->events($runId) as $event) {
-            if ($event['idempotency_key'] === $key) {
-                return $event;
-            }
-        }
+        $statement = $this->pdo->prepare(
+            'SELECT * FROM run_events WHERE run_id = :run_id AND idempotency_key = :idempotency_key'
+        );
+        $statement->execute(['run_id' => $runId, 'idempotency_key' => $key]);
+        $row = $statement->fetch(PDO::FETCH_ASSOC);
 
-        return null;
+        return is_array($row) ? $this->hydrateEvent($row) : null;
     }
 
     /**
@@ -283,9 +367,7 @@ final class MysqlRunStore implements RunStore, StoreDiagnostics
         $events->execute(['run_id' => $runId]);
         $removed = (int) $events->fetchColumn();
 
-        $this->pdo->beginTransaction();
-
-        try {
+        $this->transaction(function () use ($runId): void {
             $this->pdo
                 ->prepare('DELETE FROM run_board WHERE run_id = :run_id')
                 ->execute(['run_id' => $runId]);
@@ -295,13 +377,7 @@ final class MysqlRunStore implements RunStore, StoreDiagnostics
             $this->pdo
                 ->prepare('DELETE FROM runs WHERE run_id = :run_id')
                 ->execute(['run_id' => $runId]);
-
-            $this->pdo->commit();
-        } catch (\Throwable $e) {
-            $this->pdo->rollBack();
-
-            throw $e;
-        }
+        });
 
         return $removed;
     }
@@ -368,6 +444,10 @@ final class MysqlRunStore implements RunStore, StoreDiagnostics
             'regulatory_bundle_sha256' => (string) $row['regulatory_bundle_sha256'],
             'content_version' => (string) $row['content_version'],
             'content_sha256' => (string) $row['content_sha256'],
+            'difficulty_views_version' => isset($row['difficulty_views_version'])
+                ? (string) $row['difficulty_views_version'] : '',
+            'difficulty_views_sha256' => isset($row['difficulty_views_sha256'])
+                ? (string) $row['difficulty_views_sha256'] : '',
             'difficulty' => (string) $row['difficulty'],
             'risk_appetite' => (string) $row['risk_appetite'],
             'board_persona' => (string) $row['board_persona'],
@@ -377,8 +457,40 @@ final class MysqlRunStore implements RunStore, StoreDiagnostics
             'state_sha256' => (string) $row['state_sha256'],
             'score' => $row['score'] === null ? null : (int) $row['score'],
             'dimensions' => $this->decodeMap((string) $row['dimensions']),
+            'board_sha256' => isset($row['board_sha256']) && $row['board_sha256'] !== null
+                ? (string) $row['board_sha256'] : null,
             'created_at' => (string) $row['created_at'],
             'finalized_at' => $row['finalized_at'] === null ? null : (string) $row['finalized_at'],
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @return array<string, mixed>
+     */
+    private function hydrateEvent(array $row): array
+    {
+        return [
+            'run_id' => (string) $row['run_id'],
+            'sequence' => (int) $row['sequence'],
+            'idempotency_key' => (string) $row['idempotency_key'],
+            'request_sha256' => isset($row['request_sha256']) ? (string) $row['request_sha256'] : '',
+            'stage_id' => (string) $row['stage_id'],
+            'option_id' => (string) $row['option_id'],
+            'option_label' => isset($row['option_label']) ? (string) $row['option_label'] : '',
+            'effects' => isset($row['effects_json']) ? $this->decodeMap($row['effects_json']) : [],
+            'content_sha256' => isset($row['content_sha256']) ? (string) $row['content_sha256'] : '',
+            'rule_ids' => $this->decodeList($row['rule_ids']),
+            'metric_delta' => $this->decodeMap($row['metric_delta']),
+            'suppressed' => $this->decodeList($row['suppressed_json']),
+            'visible_fact_ids' => $this->decodeList($row['visible_fact_ids']),
+            'unknown_fact_ids' => $this->decodeList($row['unknown_fact_ids']),
+            'regulatory_status' => $this->decodeMap($row['regulatory_status']),
+            'pre_state_sha256' => (string) $row['pre_state_sha256'],
+            'post_state_sha256' => (string) $row['post_state_sha256'],
+            'prev_event_sha256' => (string) $row['prev_event_sha256'],
+            'event_sha256' => (string) $row['event_sha256'],
+            'recorded_at' => (string) $row['recorded_at'],
         ];
     }
 

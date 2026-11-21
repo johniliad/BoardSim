@@ -3,6 +3,7 @@ import { ApiError, api, type Profile as ProfileData, type SharedProfile } from '
 import {
   clearProfile,
   forgetShare,
+  MAX_PROFILE_RUNS,
   profileRunIds,
   rememberShare,
   removeFromProfile,
@@ -83,7 +84,14 @@ export default function Profile() {
 
     api
       .profile(current)
-      .then(setData)
+      .then((profile) => {
+        setData(profile);
+        if (profile.selection.missing_run_ids.length > 0) {
+          let next = current;
+          for (const id of profile.selection.missing_run_ids) next = removeFromProfile(id);
+          setIds(next);
+        }
+      })
       .catch((e: unknown) =>
         setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Unable to load your profile.'),
       );
@@ -94,6 +102,12 @@ export default function Profile() {
     setError(null);
 
     try {
+      if (token !== null) {
+        await api.revokeShare(token);
+        forgetShare();
+        setToken(null);
+        setShare(null);
+      }
       const created = await api.createShare(ids);
       rememberShare(created.token);
       setToken(created.token);
@@ -119,6 +133,32 @@ export default function Profile() {
       setShare(null);
     } catch (e: unknown) {
       setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Unable to revoke the link.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const forgetEverything = async () => {
+    setBusy(true);
+    setError(null);
+
+    try {
+      if (token !== null) {
+        await api.revokeShare(token);
+      }
+
+      forgetShare();
+      clearProfile();
+      setIds([]);
+      setData(null);
+      setToken(null);
+      setShare(null);
+    } catch (e: unknown) {
+      setError(
+        e instanceof ApiError
+          ? `${e.code}: ${e.message}`
+          : 'Unable to revoke the active share link. Nothing was forgotten; try again.',
+      );
     } finally {
       setBusy(false);
     }
@@ -169,6 +209,17 @@ export default function Profile() {
             </div>
 
             {data !== null && <SegmentTable profile={data} />}
+            {data !== null &&
+              (data.selection.missing_run_ids.length > 0 ||
+                data.selection.unfinished_run_ids.length > 0 ||
+                data.selection.incompatible_run_ids.length > 0) && (
+                <p className="bs-notice">
+                  Selection diagnostics: {data.selection.missing_run_ids.length} missing result(s)
+                  removed from this active profile, {data.selection.unfinished_run_ids.length}{' '}
+                  unfinished, and {data.selection.incompatible_run_ids.length} from an unavailable
+                  release.
+                </p>
+              )}
             {data !== null && <p className="bs-notice">{data.retention.note}</p>}
 
             <SharePanel
@@ -191,13 +242,8 @@ export default function Profile() {
                   api.profile(next).then(setData).catch(() => setData(null));
                 }
               }}
-              onForget={() => {
-                clearProfile();
-                setIds([]);
-                setData(null);
-                setToken(null);
-                setShare(null);
-              }}
+              busy={busy}
+              onForget={() => void forgetEverything()}
             />
           </>
         )}
@@ -225,8 +271,9 @@ function SharePanel({ token, share, eligible, busy, onCreate, onRevoke }: ShareP
       {token === null ? (
         <>
           <p className="bs-kpi__meta bs-mt-0">
-            Creates an unguessable link, valid for 7 days, that shows this profile read-only. Anyone
-            holding it can read the profile; revoking does not delete your runs.
+            Creates an unguessable link, valid for up to 7 days, that shows this profile read-only.
+            It expires sooner when the oldest selected run reaches deletion. Anyone holding it can
+            read the profile; revoking does not delete your runs.
           </p>
           <button
             className="bs-button"
@@ -234,14 +281,14 @@ function SharePanel({ token, share, eligible, busy, onCreate, onRevoke }: ShareP
             disabled={!eligible || busy}
             onClick={onCreate}
           >
-            {eligible ? 'Create a 7-day link' : 'Needs 3 to 5 completed scenarios'}
+            {eligible ? 'Create a link (up to 7 days)' : 'Needs 3 to 5 completed scenarios'}
           </button>
         </>
       ) : (
         <>
           <p className="bs-kpi__meta bs-mt-0">
-            A link is live for 7 days. The token is shown once and cannot be recovered — if you lose
-            it, revoke and create a new one.
+            A link is live for up to 7 days and never beyond the oldest selected run. The token is
+            shown once and cannot be recovered — if you lose it, revoke and create a new one.
           </p>
           {share !== null && (
             <p className="bs-mono bs-break-all">
@@ -267,9 +314,10 @@ interface SavedRunsProps {
   ids: string[];
   onRemove: (id: string) => void;
   onForget: () => void;
+  busy: boolean;
 }
 
-function SavedRuns({ ids, onRemove, onForget }: SavedRunsProps) {
+function SavedRuns({ ids, onRemove, onForget, busy }: SavedRunsProps) {
   return (
     <div className="bs-card">
       <p className="bs-eyebrow bs-mt-0">
@@ -296,13 +344,21 @@ function SavedRuns({ ids, onRemove, onForget }: SavedRunsProps) {
         </table>
       </div>
       <div className="bs-inline">
-        <button className="bs-button bs-button--secondary" type="button" onClick={onForget}>
+        <button
+          className="bs-button bs-button--secondary"
+          type="button"
+          disabled={busy}
+          onClick={onForget}
+        >
           Forget everything in this browser
         </button>
       </div>
       <p className="bs-kpi__meta">
         Removing a scenario from this list does not delete the run. Use the delete button on the
-        result page for that.
+        result page for that. Forgetting everything first revokes this browser's active share link,
+        then clears local history and profile selection. If revocation fails, nothing is cleared so
+        you can retry. At most {MAX_PROFILE_RUNS} results can be selected for one profile request;
+        remembered result history is stored separately.
       </p>
     </div>
   );

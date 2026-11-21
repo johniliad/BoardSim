@@ -42,6 +42,16 @@ final class UnavailableStore implements RunStore, ShareStore, StoreDiagnostics
         return array_values($sha256);
     }
 
+    public function transaction(callable $operation): mixed
+    {
+        throw $this->fail();
+    }
+
+    public function findForUpdate(string $runId): ?array
+    {
+        throw $this->fail();
+    }
+
     public function delete(string $runId): int
     {
         throw $this->fail();

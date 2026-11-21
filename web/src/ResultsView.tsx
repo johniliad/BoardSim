@@ -1,9 +1,10 @@
 import { Fragment, useEffect, useState } from 'react';
 import { ApiError, api, type Counterfactuals, type Explanation } from './api';
-import { addToProfile } from './profileStore';
+import { addToProfile, forgetResult } from './profileStore';
 import { navigate } from './nav';
 import { useGlossary } from './glossary';
 import Term from './Term';
+import ResultHelp from './ResultHelp';
 
 /** `disruption_hours` → `Disruption hours`, as in the decision ledger. */
 function humanise(value: string): string {
@@ -28,6 +29,7 @@ export default function ResultsView({ runId }: { runId: string }) {
 
     try {
       await api.deleteRun(runId);
+      forgetResult(runId);
       navigate('/');
     } catch (e: unknown) {
       setDeleteError(
@@ -99,14 +101,14 @@ export default function ResultsView({ runId }: { runId: string }) {
 
   const scoredRules = new Set(explain.trace.map((entry) => entry.rule));
 
-  // Names come from the glossary, which is derived from the same policy that
-  // scored the run, so this table cannot drift from the scorer. Until it loads
-  // the codes still render, which keeps the table readable and honest.
+  // Codes and scores come from the run's resolved release. Human-readable names come
+  // from the public glossary, which describes the deployment's current catalogue.
   const dimensionRows = (glossary?.dimensions.map((entry) => entry.code) ?? Object.keys(explain.dimensions))
     .map((code) => ({
       code,
       name: glossary?.dimensions.find((entry) => entry.code === code)?.name ?? '',
     }));
+  const integrityVerified = explain.chain.ok && explain.score_verified;
 
   return (
     <section className="bs-section">
@@ -119,21 +121,56 @@ export default function ResultsView({ runId }: { runId: string }) {
           </div>
           <div className="bs-kpi">
             <span className="bs-kpi__label">Band</span>
-            <span className="bs-kpi__value bs-fs-115">
-              {explain.label}
-            </span>
+            <ResultHelp
+              label={`Band: ${explain.label}`}
+              title="What the Band means"
+              description={
+                <p>
+                  The Band is a descriptive label assigned from the final 0–100 simulated-judgment
+                  score using this run’s pinned ruleset. It is not pass/fail, a professional
+                  certification, legal advice, a comparison with other people, or a psychometrically
+                  validated grade.
+                </p>
+              }
+            >
+              <span className="bs-kpi__value bs-fs-115">{explain.label}</span>
+            </ResultHelp>
             <span className="bs-kpi__meta">
               {explain.pins.scenario_id} · ruleset {explain.pins.ruleset_version}
             </span>
           </div>
           <div className="bs-kpi">
-            <span className="bs-kpi__label">Evidence chain</span>
-            <span className="bs-kpi__value bs-fs-115">
-              {explain.chain.ok ? 'Verified' : 'Broken'}
-            </span>
+            <span className="bs-kpi__label">Run integrity</span>
+            <ResultHelp
+              label={`Run integrity: ${integrityVerified ? 'Verified' : 'Could not verify'}`}
+              title="What Run integrity means"
+              description={
+                integrityVerified ? (
+                  <p>
+                    Verified means the saved decisions, board selections, event evidence, run state,
+                    score, and dimension values are internally consistent and were reconstructed with
+                    the run’s pinned release. It is a consistency check, not a digital signature.
+                  </p>
+                ) : (
+                  <p>
+                    BoardSim could not reproduce or validate part of the stored run. Your answer choices
+                    cannot cause this. Do not rely on the result until the application operator has
+                    investigated it; keep the run ID private when reporting the problem.
+                  </p>
+                )
+              }
+            >
+              <span className="bs-kpi__value bs-fs-115">
+                {integrityVerified ? 'Verified' : 'Could not verify'}
+              </span>
+            </ResultHelp>
             <span className="bs-kpi__meta">
-              {explain.chain.events ?? 0} events · {explain.trace.length} rule firings
+              Stored {explain.stored_score} · reconstructed {explain.reconstructed_score} ·{' '}
+              {explain.chain.events ?? 0} events
             </span>
+            {!integrityVerified && explain.chain.reason != null && (
+              <span className="bs-kpi__meta">Diagnostic: {explain.chain.reason}</span>
+            )}
           </div>
         </div>
 
@@ -203,9 +240,9 @@ export default function ResultsView({ runId }: { runId: string }) {
               What your decisions did
             </p>
             <p className="bs-kpi__meta">
-              Authored business consequences, quoted exactly as they appeared when you decided. They
-              are a teaching ledger, never a score input — the score comes only from the rule trace
-              below.
+              These authored decision labels and business consequences were snapshotted into the
+              hashed event when you decided. They are never a score input — the score comes only from
+              the rule trace below.
             </p>
             <div className="bs-table-wrap bs-mt-3">
               <table className="bs-table">
@@ -516,9 +553,9 @@ export default function ResultsView({ runId }: { runId: string }) {
           </p>
           <p className="bs-kpi__meta bs-mt-0">
             Deletion is permanent. The run, its three decisions and its board selections are removed
-            from the server, not hidden. Afterwards this result cannot be replayed or verified —
-            because it no longer exists — and any profile that included it will be recomputed from
-            the scenarios that remain.
+            from the server, not hidden. Afterwards this result cannot be opened or checked because
+              it no longer exists. This browser also removes it from local history and active profile
+              selection after the server confirms deletion.
           </p>
 
           {deleteError !== null && (

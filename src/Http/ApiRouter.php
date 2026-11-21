@@ -6,6 +6,7 @@ namespace BoardSim\Http;
 
 use BoardSim\Content\PinnedScenarios;
 use BoardSim\Domain\Run\DomainError;
+use BoardSim\Domain\Run\InputValidator;
 use BoardSim\Domain\Run\RunService;
 use BoardSim\Domain\Run\StoreUnavailable;
 
@@ -93,23 +94,11 @@ final class ApiRouter
         }
 
         if ($first === 'profiles' && $count === 1 && $method === 'POST') {
-            $runIds = $body['run_ids'] ?? null;
-
-            if (!is_array($runIds)) {
-                return [400, ['error' => 'INVALID_REQUEST', 'message' => 'run_ids must be an array']];
-            }
-
-            return [200, $this->service->profile(array_values(array_map('strval', $runIds)))];
+            return [200, $this->service->profile(InputValidator::runIdList($body['run_ids'] ?? null))];
         }
 
         if ($first === 'shares' && $count === 1 && $method === 'POST') {
-            $runIds = $body['run_ids'] ?? null;
-
-            if (!is_array($runIds)) {
-                return [400, ['error' => 'INVALID_REQUEST', 'message' => 'run_ids must be an array']];
-            }
-
-            return [201, $this->service->shareCreate(array_values(array_map('strval', $runIds)))];
+            return [201, $this->service->shareCreate(InputValidator::runIdList($body['run_ids'] ?? null))];
         }
 
         if ($first === 'shares' && $count === 2 && $method === 'GET') {
@@ -128,11 +117,10 @@ final class ApiRouter
             $stageId = $body['stage_id'] ?? null;
             $choiceId = $body['choice_id'] ?? null;
 
-            if (!is_string($stageId) || !is_string($choiceId)) {
-                return [400, ['error' => 'INVALID_REQUEST', 'message' => 'stage_id and choice_id are required']];
-            }
-
-            return [200, $this->service->demoDecide($stageId, $choiceId)];
+            return [200, $this->service->demoDecide(
+                InputValidator::stageId($stageId),
+                InputValidator::choiceId($choiceId)
+            )];
         }
 
         if ($first === 'difficulties' && $count === 1 && $method === 'GET') {
@@ -140,13 +128,13 @@ final class ApiRouter
         }
 
         if ($first === 'board-rubric' && $count === 1 && $method === 'GET') {
-            $difficulty = (string) ($query['difficulty'] ?? 'leadership');
+            $difficulty = InputValidator::difficulty($query['difficulty'] ?? null);
 
             return [200, $this->service->boardRubric($difficulty)];
         }
 
         if ($first === 'refs' && $count === 2 && $method === 'GET') {
-            return [200, $this->service->reference($segments[1])];
+            return [200, $this->service->reference(InputValidator::reference($segments[1]))];
         }
 
         if ($first === 'runs') {
@@ -167,20 +155,17 @@ final class ApiRouter
             if ($count === 3 && $segments[2] === 'decisions' && $method === 'POST') {
                 return [200, $this->service->decide(
                     $runId,
-                    (string) ($body['idempotency_key'] ?? ''),
-                    (string) ($body['stage_id'] ?? ''),
-                    (string) ($body['choice_id'] ?? '')
+                    InputValidator::idempotencyKey($body['idempotency_key'] ?? null),
+                    InputValidator::stageId($body['stage_id'] ?? null),
+                    InputValidator::choiceId($body['choice_id'] ?? null)
                 )];
             }
 
             if ($count === 3 && $segments[2] === 'board' && $method === 'POST') {
-                $selections = $body['selections'] ?? null;
-
-                if (!is_array($selections)) {
-                    return [400, ['error' => 'INVALID_REQUEST', 'message' => 'selections must be an object']];
-                }
-
-                return [200, $this->service->board($runId, array_map('strval', $selections))];
+                return [200, $this->service->board(
+                    $runId,
+                    InputValidator::boardSelections($body['selections'] ?? null)
+                )];
             }
 
             if ($count === 3 && $segments[2] === 'explain' && $method === 'GET') {

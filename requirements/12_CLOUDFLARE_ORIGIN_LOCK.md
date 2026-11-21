@@ -94,7 +94,7 @@ php -r "echo bin2hex(random_bytes(32));"
 # 3. paste the same string into the Cloudflare Transform Rule
 
 # 4. build: the placeholder is replaced, and a build without a usable value fails
-php bin/build-deploy.php --version=1.2.6
+php bin/build-deploy.php --version=1.3.2
 ```
 
 `deploy/host.config.php` is already the home of everything host-specific (account, document root, database names); the origin secret belongs there for the same reason a path does. The template `deploy/host.config.example.php` carries the key with an empty value, and the build refuses to run until it is filled — an empty key cannot be forgotten, because forgetting it stops the release instead of shipping an unreachable origin.

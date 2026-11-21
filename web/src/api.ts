@@ -14,6 +14,8 @@ export interface Pins {
   regulatory_bundle_sha256: string;
   content_version: string;
   content_sha256: string;
+  difficulty_views_version: string;
+  difficulty_views_sha256: string;
   scenario_id: string;
   scenario_version: string;
 }
@@ -175,6 +177,23 @@ export interface Explanation {
   run_id: string;
   pins: Pins;
   score: number;
+  stored_score: number;
+  reconstructed_score: number;
+  stored_dimensions: Record<string, number>;
+  reconstructed_dimensions: Record<string, number>;
+  score_verified: boolean;
+  score_verification: {
+    verified: boolean;
+    score_matches: boolean;
+    dimensions_match: boolean;
+    missing_from_stored: string[];
+    missing_from_reconstructed: string[];
+    unexpected_in_stored: string[];
+    unexpected_in_reconstructed: string[];
+    invalid_in_stored: string[];
+    invalid_in_reconstructed: string[];
+    mismatched_dimensions: string[];
+  };
   label: string;
   dimensions: Record<string, number>;
   weights: Record<string, number>;
@@ -201,7 +220,16 @@ export interface Explanation {
     regulatory_status: Record<string, RegulatoryStatus>;
     event_sha256: string;
   }>;
-  chain: { ok: boolean; events?: number; head?: string; broken_at?: number; reason?: string };
+  chain: {
+    ok: boolean;
+    events?: number;
+    head?: string;
+    broken_at?: number | null;
+    reason?: string;
+    run_state_verified?: boolean;
+    score_verified?: boolean | null;
+    score_verification?: Explanation['score_verification'];
+  };
   governance: Record<string, unknown>;
 }
 
@@ -324,7 +352,11 @@ export interface BoardResult {
 export interface ProfileSegment {
   segment: string;
   ruleset_version: string;
+  policy_sha256: string;
   content_version: string;
+  content_sha256: string;
+  difficulty_views_version: string;
+  difficulty_views_sha256: string;
   difficulty: string;
   runs: number;
   status: 'eligible' | 'insufficient' | 'over_window';
@@ -352,6 +384,13 @@ export interface Profile {
   segments: ProfileSegment[];
   segments_count: number;
   merged_across_versions: false;
+  selection: {
+    submitted_run_ids: string[];
+    accepted_run_ids: string[];
+    missing_run_ids: string[];
+    unfinished_run_ids: string[];
+    incompatible_run_ids: string[];
+  };
   retention: ProfileRetention;
   note: string;
   governance: {
@@ -522,8 +561,8 @@ export const api = {
     }),
 
   /**
-   * Portfolio aggregation. Segments are keyed on ruleset version, content
-   * version and difficulty, so the response may carry several segments even
+   * Portfolio aggregation. Segments are keyed on exact policy, content and
+   * difficulty-view hashes plus difficulty, so the response may carry several segments even
    * when one run list is supplied. A segment outside the 3–5 window returns
    * `overall: null` rather than a number.
    */

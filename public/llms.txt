@@ -1,10 +1,10 @@
 # BoardSim
 
 > BoardSim is a board-level executive cybersecurity decision simulator. A visitor
-> takes the role of an executive facing a four-stage incident: they choose one of
+> takes the role of an executive facing three decision stages: they choose one of
 > three options at each stage, substantiate a board pack, and receive a score
 > computed on the server from a published rule set, with a rule-by-rule trace, a
-> replay of the recorded decisions and a separate regulatory assessment.
+> display of the recorded decision path and a separate regulatory assessment.
 
 Canonical: https://boardsim.iliadis.net/
 Author: Dr. John ILIADIS — https://www.iliadis.net/
@@ -14,12 +14,14 @@ Licence of the interface: free to use, no account, no cost.
 ## What the product is
 
 - A decision exercise, not a course, a certification or a scanner.
-- Four stages, three authored options per stage, ten weighted dimensions of
+- Three decision stages, three authored options per stage, then a structured board
+  pack; ten weighted dimensions of
   judgement (strategic, risk, regulatory, and seven more).
-- A deterministic integer score from 0 to 100. The same decisions always produce
-  the same score: no randomness, no language model, no inference.
-- Every score is reproducible from the pinned SHA-256 hashes of the scoring
-  policy, the regulatory bundle and the scenario content that the run recorded.
+- A deterministic integer score from 0 to 100 through the release pinned to the run.
+  There is no randomness, language model or inference in scoring.
+- Every run records SHA-256 identities for the scoring policy, regulatory bundle,
+  scenario content and difficulty projection. The API resolves matching retained
+  artifacts and fails closed if an exact required artifact is unavailable.
 
 ## How the score is computed
 
@@ -57,9 +59,10 @@ this product's content without executing JavaScript.
 - POST https://boardsim.iliadis.net/v1/runs — create a run; then
   POST /v1/runs/{id}/decisions, POST /v1/runs/{id}/board and POST
   /v1/runs/{id}/score.
-- GET https://boardsim.iliadis.net/v1/runs/{id}/explain — the full explanation:
+- GET https://boardsim.iliadis.net/v1/runs/{id}/explain — the pinned-release explanation:
   score, dimensions, contributions, rule trace, authored consequences per
-  decision, regulatory panel, governance flags and the verification chain.
+  decision snapshots, regulatory panel, stored/reconstructed score comparison,
+  governance flags and the run-integrity check.
 - POST https://boardsim.iliadis.net/v1/shares — mint a read-only result link;
   GET /v1/shares/{token} reads it, DELETE revokes it.
 

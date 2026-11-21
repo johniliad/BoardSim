@@ -57,7 +57,7 @@ exactly these things. Assemble them from the checkout instead of copying by hand
 so nothing is missed:
 
 ```bash
-php bin/build-deploy.php --version=1.2.0     # writes build/deploy/<version>/
+php bin/build-deploy.php --version=1.3.2     # writes build/deploy/<version>/
 # .../docroot/app/             the built SPA, with the metadata in its shell
 # .../docroot/.htaccess        Cloudflare origin lock, routing, error documents,
 #                              security headers, dotfile denial
@@ -166,6 +166,8 @@ filename order:
 SOURCE migrations/001_init.sql;
 SOURCE migrations/002_events.sql;
 SOURCE migrations/003_share_tokens.sql;
+SOURCE migrations/004_rate_limits.sql;
+SOURCE migrations/005_release_integrity.sql;
 ```
 
 Extend the grants from `migrations/README.md`, because the app also erases and
@@ -180,8 +182,9 @@ GRANT SELECT, INSERT                ON iliadis_boardsim.content_bundles TO 'ilia
 ```
 
 `run_events` gets `DELETE` only so whole-run erasure can remove it, never
-`UPDATE` — the append-only guarantee stands. The `TRIGGER` guard in
-`migrations/README.md` is still preferred where the host grants it; the hash chain
+`UPDATE` — accepted events cannot be rewritten. The optional trigger in
+`migrations/README.md` guards **UPDATE only**; never install a no-delete trigger,
+because that would block self-service erasure and retention purge. The hash chain
 is always active regardless.
 
 ## 4. Credentials — pointer in the backend, secret in the secrets directory
@@ -266,6 +269,14 @@ Then by hand: complete a scenario to a score, check `GET /v1/runs/{id}/explain`
 returns `"chain": {"ok": true}`, delete it and confirm a second `GET` is 404, and
 re-run `php bin/governance-report.php` so the sign-off register reflects this
 deployment.
+
+`chain.ok` means that event payload hashes, link and state-transition continuity,
+the hashed run row, board selections, dimensions and reconstructed score verify
+through the release selected by the run's pins. It is not a digital signature: a
+privileged attacker who can coherently rewrite both data and hashes is outside this
+integrity model. Retain every policy/content version needed during the retention
+window. If an exact required artifact is unavailable or hash-mismatched, run
+interpretation fails closed with `RUN_RELEASE_UNAVAILABLE`.
 
 ### When the interface reports "Scoring policy unavailable" or `Unexpected token '<'`
 

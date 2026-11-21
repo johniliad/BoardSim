@@ -78,6 +78,15 @@
 }
 .bs-kpi__meta { color: var(--color-muted); font-size: 0.8125rem; }
 .bs-kpi--accent { border-top: 3px solid var(--color-accent); }
+.bs-result-help {
+  justify-self: start; padding: 0; border: 0; background: none; color: inherit;
+  font: inherit; text-align: left; cursor: help; text-decoration: underline dotted;
+  text-decoration-color: var(--color-accent); text-underline-offset: 0.18em;
+}
+.bs-result-help:hover,
+.bs-result-help:focus-visible { color: var(--color-accent-strong); }
+.bs-result-help:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 3px; }
+.bs-result-help__popover { pointer-events: none; }
 
 /* Badges — uppercase micro-labels */
 .bs-badge {

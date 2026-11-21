@@ -1,0 +1,66 @@
+# BoardSim — difficulty view policy
+#
+# 06_INTERFACE_AND_ACCESSIBILITY.md and the F-5 decision require difficulty to be
+# a *read-only projection* over the one canonical three-stage graph, never a
+# separate authored story. This overlay declares those projections.
+#
+# The important consequence: `executive` is not cosmetic. It scopes the board pack
+# to an auditable subset, so fewer board rules can fire and the attainable range
+# is lower. That is why profile aggregation must be segmented by difficulty and
+# why the run pins its difficulty at creation.
+
+schema_version: "1.0.0"
+overlay_id: "difficulty_views"
+version: "1.0.0"
+
+provenance:
+  source_kind: SIMULATION_ASSUMPTION
+  counsel_reviewed: false
+  psychometrically_calibrated: false
+
+views:
+  leadership:
+    label: Leadership
+    available: true
+    time_estimate: 25–30 minutes
+    description: Full canonical view. Complete stage narratives, stakeholder pressure,
+      option effects and all seven board fields.
+    stages: [S1, S2, S3]
+    primary_stage: null
+    board_fields: [situation, impact, uncertainty, action, funding, residual_risk, ask]
+    show_effects: true
+    show_stakeholder_pressure: true
+    challenge_cards: 3
+
+  executive:
+    label: Executive
+    available: true
+    time_estimate: 10–15 minutes
+    description: Marked subset of the same three stages. Condensed briefs, the S1
+      framing decision highlighted, and an abbreviated but still auditable board pack.
+    stages: [S1, S2, S3]
+    # The primary decision framing is highlighted, not isolated: the same three
+    # stages still run, so the scoring path and the trace stay comparable.
+    primary_stage: S1
+    # Situation, decision, investment and the resolution requested. Dropping
+    # impact, uncertainty and residual risk is what makes it abbreviated, and
+    # therefore what changes the attainable score.
+    board_fields: [situation, action, funding, ask]
+    show_effects: false
+    show_stakeholder_pressure: false
+    challenge_cards: 1
+
+  board_crisis:
+    label: Board crisis
+    available: false
+    time_estimate: 45–60 minutes
+    description: Reserved extension. Additional pre-authored injects, board and media
+      pressure, and longer narratives are not authored in v1.0.
+    unavailable_reason: Board crisis is a reserved extension and has not been authored
+      in v1.0. The 45–60 minute variant requires new scenario content, not a view.
+    stages: [S1, S2, S3]
+    primary_stage: null
+    board_fields: []
+    show_effects: true
+    show_stakeholder_pressure: true
+    challenge_cards: 3

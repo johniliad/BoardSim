@@ -6,6 +6,7 @@ namespace BoardSim\Domain\Share;
 
 use BoardSim\Content\RetentionPolicy;
 use BoardSim\Domain\Run\DomainError;
+use BoardSim\Domain\Run\InputValidator;
 use BoardSim\Domain\Run\RunService;
 
 /**
@@ -18,9 +19,8 @@ use BoardSim\Domain\Run\RunService;
  *   - A token points at a *snapshot of run ids*, not at a profile object. There is
  *     no profile table to keep in sync, and the shared view is recomputed from the
  *     runs on every request, so it can never drift from what those runs say.
- *   - Expiry is the same 7 days as retention. A link cannot outlive its data, and
- *     when the runs are purged the link stops resolving rather than erroring
- *     ambiguously.
+ *   - Expiry is capped at the earliest included run's deletion deadline. Sharing
+ *     never extends retention, and a live link cannot outlive its data.
  */
 final class ShareService
 {
@@ -38,9 +38,20 @@ final class ShareService
      */
     public function create(array $runIds, ?string $nowUtc = null): array
     {
+        $runIds = InputValidator::runIdList($runIds);
+
         // Aggregating first means a share can never be created for a set that is
         // not a valid profile: wrong window, mixed versions, unfinished runs.
         $profile = $this->runs->profile($runIds);
+
+        if (($profile['selection']['missing_run_ids'] ?? []) !== []
+            || ($profile['selection']['unfinished_run_ids'] ?? []) !== []
+            || ($profile['selection']['incompatible_run_ids'] ?? []) !== []
+        ) {
+            throw DomainError::invalid(
+                'Every shared run must exist, be finalized, and match the release loaded by this deployment.'
+            );
+        }
 
         $eligible = false;
 
@@ -57,15 +68,27 @@ final class ShareService
             );
         }
 
-        $now = $nowUtc === null ? time() : (int) strtotime($nowUtc);
-
-        if ($now === false) {
-            throw DomainError::invalid('Unparseable timestamp');
-        }
+        $now = $this->timestamp($nowUtc);
 
         $days = $this->retention->shareTtlDays();
         $token = bin2hex(random_bytes(32));
-        $expiresAt = gmdate('Y-m-d\TH:i:s\Z', $now + ($days * 86400));
+        $ttlExpiry = $now + ($days * 86400);
+        $oldestFinalized = (string) ($profile['retention']['oldest_run_finalized_at'] ?? '');
+        $oldestTimestamp = strtotime($oldestFinalized);
+
+        if ($oldestFinalized === '' || $oldestTimestamp === false) {
+            throw DomainError::invalid('A share link requires finalized runs with a retention deadline.');
+        }
+
+        $runExpiry = $oldestTimestamp + ($this->retention->runRetentionDays() * 86400);
+        $expiry = min($ttlExpiry, $runExpiry);
+
+        if ($expiry <= $now) {
+            throw DomainError::invalid('The selected runs have reached their retention deadline and cannot be shared.');
+        }
+
+        $expiresAt = gmdate('Y-m-d\TH:i:s\Z', $expiry);
+        $expiresInDays = (int) ceil(($expiry - $now) / 86400);
 
         $this->store->put(hash('sha256', $token), [
             'run_ids' => array_values(array_map('strval', $runIds)),
@@ -78,12 +101,13 @@ final class ShareService
             'token' => $token,
             'path' => '/#/shared/' . $token,
             'expires_at' => $expiresAt,
-            'expires_in_days' => $days,
+            'expires_in_days' => $expiresInDays,
             'runs' => count($runIds),
             'profile' => $profile['segments'],
             'note' => 'This token is shown once and is not recoverable from the server: only its '
                 . 'hash is stored. Anyone holding the link can read the profile until it expires or '
-                . 'is revoked. Revoking does not delete the runs.',
+                . 'is revoked. The link is capped at the earliest run deletion deadline; sharing '
+                . 'does not extend retention. Revoking does not delete the runs.',
         ];
     }
 
@@ -93,25 +117,27 @@ final class ShareService
     public function resolve(string $token, ?string $nowUtc = null): array
     {
         $record = $this->load($token);
-        $now = $nowUtc === null ? time() : (int) strtotime($nowUtc);
+        $now = $this->timestamp($nowUtc);
 
         if ($record['revoked_at'] !== null) {
             throw DomainError::notFound('Share link', 'revoked');
         }
 
-        if (strtotime((string) $record['expires_at']) < $now) {
+        if ((int) strtotime((string) $record['expires_at']) <= $now) {
             throw DomainError::notFound('Share link', 'expired');
         }
 
         $remaining = (int) ceil((strtotime((string) $record['expires_at']) - $now) / 86400);
 
-        try {
-            $profile = $this->runs->profile((array) $record['run_ids']);
-        } catch (DomainError $e) {
-            // The runs were purged or deleted while the link was live.
+        $profile = $this->runs->profile((array) $record['run_ids']);
+
+        if (($profile['selection']['missing_run_ids'] ?? []) !== []
+            || ($profile['selection']['unfinished_run_ids'] ?? []) !== []
+            || ($profile['selection']['incompatible_run_ids'] ?? []) !== []
+        ) {
             throw DomainError::notFound(
                 'Share link',
-                'its underlying runs were deleted, so this link no longer resolves'
+                'its underlying runs were deleted or can no longer be interpreted, so this link no longer resolves'
             );
         }
 
@@ -140,7 +166,7 @@ final class ShareService
             ];
         }
 
-        $at = gmdate('Y-m-d\TH:i:s\Z', $nowUtc === null ? time() : (int) strtotime($nowUtc));
+        $at = gmdate('Y-m-d\TH:i:s\Z', $this->timestamp($nowUtc));
         $this->store->revoke($hash, $at);
 
         return [
@@ -157,7 +183,9 @@ final class ShareService
      */
     private function load(string $token): array
     {
-        if ($token === '' || preg_match('/^[0-9a-f]{64}$/', $token) !== 1) {
+        try {
+            $token = InputValidator::shareToken($token);
+        } catch (DomainError) {
             throw DomainError::notFound('Share link', 'malformed token');
         }
 
@@ -168,5 +196,20 @@ final class ShareService
         }
 
         return $record;
+    }
+
+    private function timestamp(?string $utc): int
+    {
+        if ($utc === null) {
+            return time();
+        }
+
+        $parsed = strtotime($utc);
+
+        if ($parsed === false) {
+            throw DomainError::invalid('Unparseable timestamp');
+        }
+
+        return $parsed;
     }
 }

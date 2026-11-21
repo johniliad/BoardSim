@@ -40,8 +40,8 @@ final class InMemoryShareStore implements ShareStore
 
             // Purge on whichever came first: an expired or revoked token has no
             // further use, and keeping it would be retention without purpose.
-            $dead = $expiry !== '' && $expiry < $cutoffIso;
-            $dead = $dead || ($revoked !== '' && $revoked < $cutoffIso);
+            $dead = $expiry !== '' && $expiry <= $cutoffIso;
+            $dead = $dead || ($revoked !== '' && $revoked <= $cutoffIso);
 
             if ($dead) {
                 unset($this->tokens[$hash]);

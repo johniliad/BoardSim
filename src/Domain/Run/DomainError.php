@@ -47,6 +47,20 @@ final class DomainError extends RuntimeException
         return new self('CONFLICT', $detail, 409);
     }
 
+    public static function releaseUnavailable(string $detail): self
+    {
+        return new self('RUN_RELEASE_UNAVAILABLE', $detail, 409);
+    }
+
+    public static function tooLarge(int $maxBytes): self
+    {
+        return new self(
+            'PAYLOAD_TOO_LARGE',
+            "Request body exceeds the {$maxBytes}-byte limit",
+            413
+        );
+    }
+
     public static function methodNotAllowed(string $method): self
     {
         return new self('METHOD_NOT_ALLOWED', "Method {$method} is not allowed here", 405);

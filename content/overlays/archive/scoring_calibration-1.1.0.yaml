@@ -1,0 +1,205 @@
+# BoardSim — ruleset 1.1.0 calibration proposal
+#
+# Why this file exists
+# --------------------
+# The full enumeration of ruleset 1.0.0 (2,268 runs) showed two calibration
+# defects, documented in docs/calibration-findings.md:
+#
+#   C-1  The score is almost a function of how many times option A is chosen.
+#        Measured mean net delta per firing: A +11.58, B -9.61, C -5.91.
+#        That means the middle-ground option was punished *harder* than the
+#        worst option, and an "always pick A" strategy scored 79-84.
+#
+#   C-2  Risk appetite moved the mean by only 0.04 points.
+#
+# These are properties of the authored delta catalogue, not of the engine. They
+# are corrected here as a NEW VERSION, never by editing the pinned source:
+# 03_DECISION_RULES.md remains untouched and ruleset 1.0.0 stays reproducible.
+#
+# Design rules applied
+# --------------------
+#   1. Trim the clustered bonuses. The largest positive rules fired on most
+#      A-options, so shrinking them reduces path dominance without removing the
+#      signal that good governance is rewarded.
+#   2. Soften rather than invert the penalties. Concealment stays the worst
+#      behaviour, but a 24-point penalty on one rule compressed the whole scale.
+#   3. Keep the ordering. Option A must still outscore the alternatives overall.
+#      This is a rebalance, not a reward for poor decisions.
+#   4. No rule changes sign, and no dimension that was positive becomes negative.
+#
+# Every override restates the pinned profile in `from`. The loader refuses to
+# apply an override whose `from` does not exactly match the pinned catalogue, so
+# this file cannot silently overwrite a different value if the source changes.
+
+schema_version: "1.0.0"
+overlay_id: "scoring_calibration"
+ruleset_version: "1.1.0"
+supersedes: "1.0.0"
+
+calibration_note: Rebalances the published delta catalogue so that path choice
+  no longer dominates the score, while preserving behavioural ordering so that
+  proportionate board-ready decisions still score highest.
+
+provenance:
+  source_kind: SIMULATION_ASSUMPTION
+  counsel_reviewed: false
+  psychometrically_calibrated: false
+
+delta_overrides:
+  # --- Clustered bonuses, trimmed ---
+  DR-001:
+    from: {DQ: 5, LE: 4, SM: 3}
+    to: {DQ: 3, LE: 2, SM: 2}
+    reason: Fired on multiple A-options; a 12-point net bonus per stage was disproportionate.
+
+  DR-008:
+    from: {LE: 3, RJ: 4, RG: 3}
+    to: {LE: 2, RJ: 2, RG: 2}
+    reason: The most frequently fired rule in the catalogue (12 A-firings); trimmed to reduce stacking.
+
+  DR-009:
+    from: {BI: 5, FJ: 6, SJ: 2}
+    to: {BI: 3, FJ: 3, SJ: 1}
+    reason: Quantifying impact is a good behaviour, not a 13-point one.
+
+  DR-011:
+    from: {CO: 6, LE: 2, SM: 5}
+    to: {CO: 3, LE: 1, SM: 3}
+    reason: Fired on 14 A-options and no other position, so it was a direct subsidy for picking A.
+
+  DR-013:
+    from: {BI: 4, DQ: 2, RJ: -3}
+    to: {BI: 3, DQ: 2, RJ: -2}
+    reason: Bounded monitoring is the middle-ground behaviour; it should be competitive.
+
+  DR-016:
+    from: {RE: 5, RJ: 5, SJ: 3}
+    to: {RE: 3, RJ: 3, SJ: 2}
+    reason: Hard supplier limits are correct but were worth 13 points on 8 A-options.
+
+  DR-017:
+    from: {DQ: 4, FJ: 4, SJ: 5}
+    to: {DQ: 2, FJ: 2, SJ: 3}
+    reason: Measurable milestones were over-weighted relative to every other governance rule.
+
+  DR-020:
+    from: {FJ: 7, RJ: 3, SJ: 3}
+    to: {FJ: 4, RJ: 2, SJ: 2}
+    reason: Proportional allocation carried the single largest FJ bonus in the catalogue.
+
+  DR-022:
+    from: {CO: 4, LE: 6, SM: 5}
+    to: {CO: 2, LE: 3, SM: 3}
+    reason: The largest net bonus (+15) on 10 A-options; the main driver of the top of the distribution.
+
+  DR-023:
+    from: {BI: 4, DQ: 5, RJ: 3}
+    to: {BI: 2, DQ: 3, RJ: 2}
+    reason: Adapting controls to context is important but fired on 9 A-options.
+
+  DR-026:
+    from: {DQ: 4, RG: 8}
+    to: {DQ: 3, RG: 5}
+    reason: Reviewing obligations by entity and date is correct; 12 points over-rewarded it.
+
+  DR-028:
+    from: {FJ: 3, RE: 3, SJ: 5}
+    to: {FJ: 2, RE: 2, SJ: 3}
+    reason: Also used by 5 C-options, so trimming narrows the gap without erasing it.
+
+  DR-030:
+    from: {DQ: 5, LE: 3, RJ: 5}
+    to: {DQ: 3, LE: 2, RJ: 3}
+    reason: Correcting bias and oversight controls is required behaviour, not exceptional.
+
+  DR-038:
+    from: {DQ: 4, RE: 4, SJ: 5}
+    to: {DQ: 2, RE: 2, SJ: 3}
+    reason: Remediation ownership was among the highest bonuses in the catalogue.
+
+  DR-039:
+    from: {CO: 2, DQ: 3, RG: 7}
+    to: {CO: 1, DQ: 2, RG: 4}
+    reason: Recording legal clocks is valuable, but a 12-point net exceeded the actual judgement.
+
+  # --- Remaining clustered bonuses, trimmed for the same reason ---
+  DR-003:
+    from: {DQ: 3, RG: 2, RJ: 5}
+    to: {DQ: 2, RG: 1, RJ: 3}
+    reason: Fired only on A-options; trimmed with the rest of the governance cluster.
+
+  DR-019:
+    from: {DQ: 3, RG: 4, RJ: 4}
+    to: {DQ: 2, RG: 2, RJ: 2}
+    reason: Evidence integrity is important but was worth 11 points on 2 A-options only.
+
+  DR-024:
+    from: {FJ: 2, LE: 5, RE: 3}
+    to: {FJ: 1, LE: 3, RE: 2}
+    reason: Staff capability is a genuine strength; trimmed alongside the cluster it belongs to.
+
+  DR-034:
+    from: {CO: 5, RG: 2, SM: 4}
+    to: {CO: 3, RG: 1, SM: 2}
+    reason: Proactive factual updates overlap heavily with DR-011, so the pair was double-paying.
+
+  DR-035:
+    from: {FJ: 3, LE: 4, RE: 4}
+    to: {FJ: 2, LE: 2, RE: 2}
+    reason: Emergency funding with controls is correct behaviour, not an 11-point one.
+
+  # --- Penalties softened, ordering preserved ---
+  DR-014:
+    from: {DQ: -7, LE: -5, SM: -5}
+    to: {DQ: -4, LE: -3, SM: -3}
+    reason: Deferring escalation must still hurt, but 17 points on 8 B-options pushed B below C.
+
+  DR-015:
+    from: {CO: -8, RG: -3, RJ: -5}
+    to: {CO: -4, RG: -2, RJ: -3}
+    reason: The heaviest B-side penalty (13 B-firings); overclaiming is serious but was double-weighted.
+
+  DR-025:
+    from: {FJ: -3, RE: -4, RJ: -5}
+    to: {FJ: -2, RE: -3, RJ: -3}
+    reason: Unplanned outsourcing remains penalised, at a scale consistent with the rest.
+
+  DR-027:
+    from: {CO: -3, DQ: -5, RG: -9}
+    to: {CO: -2, DQ: -3, RG: -5}
+    reason: The guard already restricts this rule to confirmed triggers, so it need not carry the largest RG penalty.
+
+  DR-031:
+    from: {CO: -7, LE: -7, RG: -4, SM: -6}
+    to: {CO: -4, LE: -4, RG: -2, SM: -3}
+    reason: Concealment remains the single worst behaviour (-13), but -24 compressed the whole scale.
+
+  DR-036:
+    from: {BI: 3, RE: -5, RJ: -6, SJ: 2}
+    to: {BI: 2, RE: -3, RJ: -4, SJ: 1}
+    reason: Over-allocating without a control floor is a real failure; softened so a defensible exception can compete.
+
+  DR-040:
+    from: {CO: -7, LE: -3, RJ: -4}
+    to: {CO: -4, LE: -2, RJ: -2}
+    reason: Overpromising safety is a communication failure and was weighted like concealment.
+
+# Risk appetite is widened from +/-2 to +/-4 on the same four rules, staying
+# within 02_SCORING_MODEL.md (RJ only, DR-002/004/007/010). At +/-2 the choice
+# moved the corpus mean by 0.04 points, which made the UI setting meaningless.
+risk_appetite_delta:
+  conservative: {DR-002: -4, DR-004: 4, DR-007: -4, DR-010: 4}
+  balanced: {}
+  aggressive: {DR-002: 4, DR-004: -4, DR-007: 4, DR-010: -4}
+
+# Rescaling the deltas narrows the observed distribution, so the pinned ladder
+# bands stop being reachable: under 1.1.0 no run exceeds 79, which would leave
+# "Excellent simulated judgment" (>=90) and "Strong" (>=80) permanently unused.
+# The ladder is therefore re-anchored to the calibrated distribution. This is a
+# labelling change only; the integer arithmetic and the rounding are untouched.
+score_ladder:
+  - {min: 78, label: Excellent simulated judgment}
+  - {min: 74, label: Strong simulated judgment}
+  - {min: 70, label: Capable simulated judgment}
+  - {min: 64, label: Developing simulated judgment}
+  - {min: 0, label: Needs reflection in this simulation}

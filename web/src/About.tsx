@@ -48,12 +48,10 @@ export default function About() {
           <a href="#/methodology">methodology page</a>.
         </p>
         <p>
-          Every input that can change a score is pinned with a SHA-256 hash — the scoring policy,
-          the regulatory bundle and the scenario content — and the run stores those hashes. The
-          result page shows the full rule trace (which rule fired, which dimension it moved and by
-          how much), the arithmetic behind the final number, and a verification chain over the
-          recorded event log. The same decisions replay to the same score, which is what makes the
-          feedback auditable rather than anecdotal.
+          The run records SHA-256 identities for the scoring policy, regulatory bundle, scenario
+          content and difficulty projection. Run operations resolve the matching retained release and
+          fail explicitly if an exact required artifact is unavailable. The result page verifies the
+          hashed event evidence, run state, board selections and reconstructed score.
         </p>
 
         <h2>Understanding the result</h2>
@@ -84,21 +82,25 @@ export default function About() {
         <ul>
           <li>
             There is <strong>no account and no login</strong>. Possessing a run identifier is the
-            capability: whoever holds the identifier can view, replay or delete that run.
+            capability: whoever holds the identifier can view its current state and result, request
+            its explanation and counterfactuals, or delete it.
           </li>
           <li>
-            Runs are kept for <strong>seven days</strong> from the last activity and are then
-            physically deleted by a scheduled job. Nothing is archived beyond that window.
+            Completed runs are kept for <strong>seven days from finalisation</strong>; abandoned
+            runs use their creation time. They are then physically deleted by a scheduled job.
           </li>
           <li>
             You can <strong>erase a run yourself</strong> at any time from the result page.
             Deletion is physical: the run, its three decisions, its board selections and its event
-            log are removed, and the result can no longer be replayed because it no longer exists.
+            log are removed, and the result can no longer be opened or checked because it no longer
+            exists.
           </li>
           <li>
-            Share links expose a read-only view of selected runs for seven days. The link token is
-            stored only as a hash, can be revoked by you at any time, and dies with the data it
-            points to.
+            Share links expose a read-only view for up to seven days, but expire sooner when the
+            oldest selected run reaches its deletion deadline. Sharing never extends retention.
+            The token is stored only as a hash. This browser manages one active link: creating a
+            replacement revokes the old one, and “Forget everything” revokes the active link before
+            clearing local data.
           </li>
         </ul>
 

@@ -1,7 +1,8 @@
 # Retention policy
 #
-# Decision: share links expire after 7 days, and a run is retained for at most
-# 7 days from its last activity. Nothing outlives the link it was shared through.
+# Decision: a run is retained for at most 7 days from finalisation (or creation
+# when abandoned). A share link lasts up to 7 days, but is capped at the earliest
+# included run's deletion deadline. Sharing never extends retention.
 #
 # This is deliberately aggressive on data minimisation, and it has a real cost that
 # the interface must state rather than bury: a profile needs 3-5 completed
@@ -9,11 +10,10 @@
 # spreads three scenarios across three weeks will lose the first before finishing
 # the third. The profile screen therefore shows the count *and* the days left.
 #
-# Note the clock: `run_retention_days` is measured from the last activity on the
-# run. Today that is the run's own finalised timestamp. Once share tokens exist,
-# creating or refreshing a link extends the clock for the runs it exposes, so a
-# live link never points at a purged run.
-version: "1.0.0"
+# Note the clock: completed runs use their finalised timestamp; abandoned runs use
+# creation time. A link therefore may live for less than share_ttl_days when it
+# includes an older run, but it can never remain live after that run is purged.
+version: "1.3.2"
 kind: retention
 share_ttl_days: 7
 run_retention_days: 7
@@ -23,6 +23,6 @@ profile_window_days: 7
 # deleted in the live system at day 7, still inside a backup until it rotates at day 14.
 # The consent text states this rather than claiming a flat 7.
 backup_rotation_days: 7
-clock: last_activity
+clock: finalized_at_or_created_at
 delete_model: physical
 soft_delete: false

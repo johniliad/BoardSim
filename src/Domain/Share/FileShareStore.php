@@ -61,8 +61,8 @@ final class FileShareStore implements ShareStore
             $expiry = (string) ($record['expires_at'] ?? '');
             $revoked = (string) ($record['revoked_at'] ?? '');
 
-            if (($expiry !== '' && $expiry < $cutoffIso)
-                || ($revoked !== '' && $revoked < $cutoffIso)
+            if (($expiry !== '' && $expiry <= $cutoffIso)
+                || ($revoked !== '' && $revoked <= $cutoffIso)
             ) {
                 unset($this->tokens[$hash]);
                 $removed++;

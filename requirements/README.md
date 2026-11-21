@@ -18,23 +18,18 @@ BoardSim is a **board-level executive decision simulator**, not a cyber quiz. It
 | [07_ACCEPTANCE_TESTS.md](07_ACCEPTANCE_TESTS.md) | Goldens, invariants, tamper tests and legal timing tests |
 | [08_CONTENT_GOVERNANCE.md](08_CONTENT_GOVERNANCE.md) | Authoring, version pinning, approvals and source limitations |
 | [09_REPLAY_REPORT.md](09_REPLAY_REPORT.md) | Executed scoring enumeration and actual rule-level score trace |
-| [09_REPLAY_REPORT.md](09_REPLAY_REPORT.md) | Executed scoring enumeration and actual rule-level score trace |
-| [09_REPLAY_REPORT.md](09_REPLAY_REPORT.md) | Executed scoring enumeration and actual rule-level score trace |
-| [09_REPLAY_REPORT.md](09_REPLAY_REPORT.md) | Executed scoring enumeration and actual rule-level score trace |
-| [09_REPLAY_REPORT.md](09_REPLAY_REPORT.md) | Executed scoring enumeration and actual rule-level score trace |
-| [09_REPLAY_REPORT.md](09_REPLAY_REPORT.md) | Executed scoring enumeration and actual rule-level score trace |
 | [12_CLOUDFLARE_ORIGIN_LOCK.md](12_CLOUDFLARE_ORIGIN_LOCK.md) | **Always on** — the origin answers only Cloudflare-forwarded traffic: the header rule, where the secret lives, rotation and verification |
 
 | [engine/CONFIG.md](engine/CONFIG.md) | Single editable scoring policy and risk modifiers |
 | [engine/RULE_SCHEMA.md](engine/RULE_SCHEMA.md) | Allowed syntax, semantic validation, deterministic evaluation |
-| [scenarios/BS-001.md](scenarios/BS-001.md) – [BS-014.md](scenarios/BS-014.md) | Fourteen runnable, versioned scenario contracts |
+| [scenarios/BS-001.md](scenarios/BS-001.md) – [BS-014.md](scenarios/BS-014.md) | Fourteen runnable, versioned contracts with three decision stages and a board pack |
 | [SCENARIO_INDEX.md](SCENARIO_INDEX.md) | Scenario catalog and coverage matrix |
 
 ### How to customize scoring (without giving the LLM control)
 
 1. Edit **engine/CONFIG.md** (weights, bounds, severity multipliers), **03_DECISION_RULES.md** (rule score deltas), or scenario option-to-rule mappings.
 2. Validate against `engine/RULE_SCHEMA.md` and `07_ACCEPTANCE_TESTS.md`; changes that break invariants **must fail build**.
-3. Bump `ruleset_version`, compute the SHA-256 of all scoring inputs, publish the new policy and **do not rewrite old runs**. The same facts, answers, pinned content and scoring version must reproduce the same totals and trace.
+3. Bump `ruleset_version`, compute the SHA-256 of all scoring inputs, publish the new policy and **do not rewrite old runs**. Retain the old immutable policy/content artifacts for at least the run-retention window. The runtime resolves retained runs by their pins and fails closed if an exact required artifact is unavailable.
 4. Do not present uncalibrated scores as empirical measures of professional capability. Labels are illustrative, not psychometrically validated.
 
 ### Source boundaries

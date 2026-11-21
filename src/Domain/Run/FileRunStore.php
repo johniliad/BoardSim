@@ -23,6 +23,8 @@ final class FileRunStore implements RunStore
     /** @var array<string, true> run ids known to this store, including new ones */
     private array $runIds = [];
 
+    private bool $inTransaction = false;
+
     public function __construct(private readonly string $path)
     {
         $this->state = $this->read();
@@ -30,11 +32,39 @@ final class FileRunStore implements RunStore
         $this->hydrate();
     }
 
+    public function transaction(callable $operation): mixed
+    {
+        if ($this->inTransaction) {
+            return $operation();
+        }
+
+        $runIds = $this->runIds;
+        $this->inTransaction = true;
+
+        try {
+            $result = $this->inner->transaction($operation);
+            $this->inTransaction = false;
+            $this->persist();
+
+            return $result;
+        } catch (\Throwable $e) {
+            $this->runIds = $runIds;
+            $this->inTransaction = false;
+
+            throw $e;
+        }
+    }
+
+    public function findForUpdate(string $runId): ?array
+    {
+        return $this->inner->findForUpdate($runId);
+    }
+
     public function create(array $run): void
     {
         $this->inner->create($run);
         $this->runIds[(string) $run['run_id']] = true;
-        $this->persist();
+        $this->persistUnlessTransactional();
     }
 
     public function find(string $runId): ?array
@@ -45,13 +75,13 @@ final class FileRunStore implements RunStore
     public function update(array $run): void
     {
         $this->inner->update($run);
-        $this->persist();
+        $this->persistUnlessTransactional();
     }
 
     public function appendEvent(array $event): void
     {
         $this->inner->appendEvent($event);
-        $this->persist();
+        $this->persistUnlessTransactional();
     }
 
     public function events(string $runId): array
@@ -67,13 +97,13 @@ final class FileRunStore implements RunStore
     public function saveBoard(string $runId, array $selections): void
     {
         $this->inner->saveBoard($runId, $selections);
-        $this->persist();
+        $this->persistUnlessTransactional();
     }
 
     public function delete(string $runId): int
     {
         $removed = $this->inner->delete($runId);
-        $this->persist();
+        $this->persistUnlessTransactional();
 
         return $removed;
     }
@@ -84,7 +114,7 @@ final class FileRunStore implements RunStore
     public function purgeBefore(string $cutoffIso): array
     {
         $purged = $this->inner->purgeBefore($cutoffIso);
-        $this->persist();
+        $this->persistUnlessTransactional();
 
         return $purged;
     }
@@ -97,7 +127,7 @@ final class FileRunStore implements RunStore
     public function noteBundle(string $sha256, string $kind, string $version, string $payload): void
     {
         $this->inner->noteBundle($sha256, $kind, $version, $payload);
-        $this->persist();
+        $this->persistUnlessTransactional();
     }
 
     private function hydrate(): void
@@ -144,6 +174,13 @@ final class FileRunStore implements RunStore
         }
 
         file_put_contents($this->path, json_encode($this->state, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    }
+
+    private function persistUnlessTransactional(): void
+    {
+        if (!$this->inTransaction) {
+            $this->persist();
+        }
     }
 
     /**
