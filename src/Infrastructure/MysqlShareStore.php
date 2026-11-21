@@ -63,7 +63,7 @@ final class MysqlShareStore implements ShareStore
     {
         $statement = $this->pdo->prepare(
             'DELETE FROM share_tokens
-             WHERE expires_at < :cutoff OR (revoked_at IS NOT NULL AND revoked_at < :cutoff)'
+             WHERE expires_at <= :cutoff OR (revoked_at IS NOT NULL AND revoked_at <= :cutoff)'
         );
         $statement->execute(['cutoff' => $cutoffIso]);
 

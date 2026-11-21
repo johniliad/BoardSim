@@ -108,7 +108,7 @@ rules, "small" modifiers — appetite cannot become a meaningful scoring lever. 
 honest options are to describe it in the UI as a framing device, or to revisit the
 model in a future version.
 
-## Reproducibility guarantee
+## Reproducibility scope
 
 - The 99 pinned files listed in `SHA256_MANIFEST.md` are unchanged.
 - `php bin/enumerate.php --ruleset=1.0.0` still reproduces `09_REPLAY_REPORT.md`
@@ -116,8 +116,10 @@ model in a future version.
 - `php bin/verify-scoring.php` still reproduces the worked example — BS-001 with
   `A,A,A` and all seven board fields — as numerator 8,058 and score 81 under
   `1.0.0`, and 7,753 / 78 under `1.1.0`.
-- Any run stored under `1.0.0` can be replayed against `1.0.0` indefinitely,
-  because the version is pinned on the run and the baseline is never overwritten.
+- Offline tools can still select the archived `1.0.0` artefacts and reproduce this
+  report. A stored run records the `1.0.0` identity, but the public runtime does not
+  currently load a release from that pin. Historical API replay is therefore not
+  guaranteed across deployments until a per-run release repository is implemented.
 
 ## Governance
 

@@ -11,7 +11,7 @@
 
 schema_version: "1.0.0"
 overlay_id: "difficulty_views"
-version: "1.0.0"
+version: "1.3.2"
 
 provenance:
   source_kind: SIMULATION_ASSUMPTION

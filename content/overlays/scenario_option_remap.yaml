@@ -1,4 +1,4 @@
-# BoardSim — content version 1.3.0: option-to-rule corrections
+# BoardSim — content version 1.3.2: option-to-rule corrections
 #
 # The specification README lists "scenario option-to-rule mappings" as the
 # sanctioned way to customise scoring. Because the scenario files are SHA-256
@@ -32,8 +32,8 @@
 
 schema_version: "1.0.0"
 overlay_id: "scenario_option_remap"
-content_version: "1.3.0"
-supersedes: "1.2.0"
+content_version: "1.3.2"
+supersedes: "1.3.0"
 
 provenance:
   source_kind: SIMULATION_ASSUMPTION

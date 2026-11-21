@@ -33,7 +33,8 @@ Statuses: **proven** (an assertion fails if it regresses) · **partial** ·
 | --- | --- | --- |
 | Each stage has exactly A/B/C, all 27 vectors replay | proven | 2,268 runs per difficulty, each replayed twice, byte-identical |
 | Selected option maps to nonempty valid rules | proven | `enumerate`: every `DR-xxx` resolves in the pinned ruleset |
-| Idempotency key prevents double-scoring | proven | `verify-api`: one event recorded, replay adds none |
+| Same key + same decision prevents double-scoring | proven | `verify-api`: one event recorded, replay adds none |
+| Same key + different stage/choice rejects | proven | `verify-api`: canonical request hash is bound to the key; mismatched stage/choice returns 409 |
 | Wrong stage rejects | proven | `verify-api`: 409 |
 | Unrecognised option rejects | proven | `verify-api`: 400, not a 500 |
 | Canonical serialisation, key-order invariance | proven | `CanonicalJson` sorted keys; `verify-http` event hash stable |
@@ -43,7 +44,8 @@ Statuses: **proven** (an assertion fails if it regresses) · **partial** ·
 | Requirement | Status | Evidence |
 | --- | --- | --- |
 | Concrete `scenario`, `ruleset_version`, `weighted_numerator`, `rounding`, `trace`, `legal` keys | proven | `verify-api` machine-readable contract block (`floor((7822+50)/100)`) |
-| Every printed number equals engine data | proven | `explain()` rebuilds from the stored event log, never re-evaluates |
+| Every printed number equals pinned-release reconstruction | proven | `explain()` resolves the run release, returns stored/reconstructed score separately, and `score_verified` compares the score plus all ten named integer dimensions independent of JSON key order; `verify-api` exercises a MySQL-style reordered map and malformed maps |
+| Band and integrity labels explain their meaning without mouse-only access | proven | Result KPI values open accessible hover/focus/click/touch popovers; failed consistency is worded `Could not verify` and states that answer choices cannot cause it |
 | Positive and negative deltas with pre/post and evidence | proven | `trace[].deltas`, `pre_clamp`, `evidence_refs` |
 | **"What would change it?" with exact numerical effect** | proven | `GET /v1/runs/{id}/counterfactuals` — substitution + full replay, identity-checked against the recorded score |
 | Separate legal assessment, never mixed into the score | proven | `legal.assessment` = "never alters the score"; panel covers 28 instruments with resolvable `/v1/refs/` links |
@@ -75,8 +77,8 @@ Statuses: **proven** (an assertion fails if it regresses) · **partial** ·
 | --- | --- | --- |
 | A delta change moves only the corresponding dimension | proven | `verify-scoring` policy-delta test |
 | Appetite modifiers affect only RJ, only matching DR ids | proven | `verify-scoring` |
-| A source update never changes a pinned run | proven | 1.0.0 pin replays to 81 forever |
-| Event tampering is detected and located | proven | `verify-api`: first broken event named |
+| A source update never changes a pinned run | proven | `verify-api` creates under retained 1.0.0, continues/explains through the current service, and requires the original release or `RUN_RELEASE_UNAVAILABLE` |
+| Persisted evidence/run tampering is detected and located | proven | `verify-api`: event payloads including suppression/regulatory/time/snapshots, state continuity, run row, board selections, score and dimensions |
 | Changing an LLM prompt cannot change a replay | by design | No model in the path. |
 
 ## 06 — interface and accessibility
@@ -98,7 +100,7 @@ Statuses: **proven** (an assertion fails if it regresses) · **partial** ·
 | Free text never graded | proven | Board pack accepts structured selections only |
 | Landing offers demo **and** scenario routes | proven | `#/demo` challenge + "Start a scenario"; demo cannot produce a total because the scorer is never constructed |
 | Results: expand every `DR-xxx` with deltas and source status | partial | Trace is tabulated with deltas; no per-rule drawer and no link to the catalogue |
-| Profiles, share links, expiry, revocation | proven | Profile screen shows count **and** days left; `POST /v1/shares` mints a hashed 7-day token, `DELETE` revokes, `/v1/shares/{token}` is read-only. Token is shown once; only its SHA-256 is stored |
+| Profiles, share links, expiry, revocation | proven | Structured selection diagnostics prune missing active IDs; history and active selection are separate; browser/API both cap selection at 20; one active share is revoked before replacement or browser forgetting |
 | Dates/currency locale-correct, integers stored | partial | UTC ISO timestamps stored; no locale formatting layer |
 
 ## 08 / 09 — governance and replay
@@ -106,7 +108,8 @@ Statuses: **proven** (an assertion fails if it regresses) · **partial** ·
 | Requirement | Status | Note |
 | --- | --- | --- |
 | Five accountable roles with sign-off per `REG-xxx` | partial | `docs/governance-protocol.md` + derived `reports/governance-signoff.md`; **0 of 28 signed** — the register exists so the absence is visible |
-| Immutable versioned release, rollback by version only | proven | Bundle `4124f451…`, three pins per run |
+| Immutable versioned release artefacts exist | proven | Offline loaders and bundle hashes preserve named releases |
+| A retained run is executed against its pinned release | proven | Policy/content are loaded by retained version and hash; regulatory/difficulty exact hashes are asserted; difficulty views are run pins; missing artifacts fail closed |
 | Replay report published | partial | `reports/enumeration-*.json` + `docs/difficulty-baselines.md`; no rendered page |
 
 ## 07 — launch blockers

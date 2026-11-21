@@ -4,6 +4,12 @@ import { navigate } from './nav';
 import BoardStage from './BoardStage';
 import Term from './Term';
 import { useGlossaryUi } from './GlossaryUi';
+import {
+  forgetPendingDecision,
+  pendingDecision,
+  rememberPendingDecision,
+  type PendingDecision,
+} from './profileStore';
 
 const STAGE_LABEL: Record<string, string> = { S1: 'Stage 1', S2: 'Stage 2', S3: 'Stage 3' };
 const STAGE_ORDER = ['S1', 'S2', 'S3'];
@@ -13,11 +19,6 @@ function humanise(value: string): string {
   const spaced = value.replaceAll('_', ' ').toLowerCase();
 
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-}
-
-/** A fresh idempotency key per submission, so a retry can never double-score. */
-function newKey(): string {
-  return crypto.randomUUID();
 }
 
 export default function RunView({ runId }: { runId: string }) {
@@ -49,11 +50,25 @@ export default function RunView({ runId }: { runId: string }) {
     setBusy(true);
     setError(null);
 
+    const existing = pendingDecision(runId);
+    const operation: PendingDecision =
+      existing?.stageId === run.stage.stage_id && existing.choiceId === chosen
+        ? existing
+        : {
+            runId,
+            stageId: run.stage.stage_id,
+            choiceId: chosen,
+            idempotencyKey: crypto.randomUUID(),
+          };
+    rememberPendingDecision(operation);
+
     try {
-      await api.decide(runId, run.stage.stage_id, chosen, newKey());
+      await api.decide(runId, operation.stageId, operation.choiceId, operation.idempotencyKey);
+      forgetPendingDecision(runId);
       setChosen(null);
       await load();
     } catch (e: unknown) {
+      if (!(e instanceof ApiError) || e.status !== 0) forgetPendingDecision(runId);
       setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Unable to record the decision.');
     } finally {
       setBusy(false);

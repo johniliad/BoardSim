@@ -6,7 +6,7 @@ declare(strict_types=1);
  * Build the two directories a shell-less cPanel host needs.
  *
  *   cp deploy/host.config.example.php deploy/host.config.php   # once
- *   php bin/build-deploy.php --version=1.2.0
+ *   php bin/build-deploy.php --version=1.3.2
  *
  * Output (all under build/deploy/<version>/):
  *

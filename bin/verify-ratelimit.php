@@ -16,6 +16,7 @@ declare(strict_types=1);
 require __DIR__ . '/../src/bootstrap.php';
 
 use BoardSim\Http\InMemoryRateLimitStore;
+use BoardSim\Http\ClientAddress;
 use BoardSim\Http\RateLimiter;
 
 $passed = 0;
@@ -37,6 +38,26 @@ function check(string $label, bool $ok, string $detail = ''): void
 }
 
 echo "== Action mapping ==\n";
+
+check(
+    'CF-Connecting-IP is the visitor identity behind the locked Cloudflare origin',
+    ClientAddress::fromServer([
+        'HTTP_CF_CONNECTING_IP' => '203.0.113.8',
+        'REMOTE_ADDR' => '172.67.203.236',
+    ]) === '203.0.113.8'
+);
+check(
+    'REMOTE_ADDR is the fallback when Cloudflare did not supply a visitor address',
+    ClientAddress::fromServer(['REMOTE_ADDR' => '127.0.0.1']) === '127.0.0.1'
+);
+check(
+    'a malformed Cloudflare address is ignored',
+    ClientAddress::fromServer([
+        'HTTP_CF_CONNECTING_IP' => 'not-an-ip',
+        'REMOTE_ADDR' => '192.0.2.10',
+    ]) === '192.0.2.10'
+);
+check('missing client addresses degrade to unknown', ClientAddress::fromServer([]) === 'unknown');
 
 check('GET maps to the read budget', RateLimiter::actionFor('GET', '/v1/glossary') === 'read');
 check('HEAD maps to the read budget', RateLimiter::actionFor('HEAD', '/v1/health') === 'read');

@@ -40,8 +40,8 @@ export default function Home({ health }: { health: Health | null }) {
           <aside className="bs-card bs-card--accent">
             <h2 className="bs-fs-100">Deterministic by design</h2>
             <p className="bs-muted-90">
-              Every score is computed server-side from pinned inputs using integer arithmetic. No
-              model inference, no random events, no hindsight.
+              Every score is computed server-side from the exact versioned inputs pinned to the run,
+              using integer arithmetic. No model inference, no random events, no hindsight.
             </p>
             <ul className="bs-muted-list">
               <li>Ten reported dimensions, weighted to 100</li>

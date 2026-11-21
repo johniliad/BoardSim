@@ -13,8 +13,8 @@ Nothing here is signed yet. That is the point of writing it down.
 | **Scenario editor** | the fictional facts, alternatives, consequences and rule mappings | every invented figure marked `SIMULATION_ASSUMPTION`; no option claims a legal outcome; `docs/dominance-register.md` verdicts acknowledged | yes |
 | **Scoring steward** | weights, dimensions, base/delta values, appetite, the ladder | both published goldens reproduce; the 2,268-run enumeration reproduces; calibration documented in `docs/calibration-findings.md` | yes |
 | **Legal subject-matter reviewer** | every enabled legal scope and threshold | accurate consolidated act, Member State implementation, effective date, report clock, and that guidance is never presented as law | yes |
-| **Engineering reviewer** | determinism, immutability, traceability, access control, data minimisation | 67 regulatory + 51 scoring + 203 API + 100 HTTP assertions green; replay byte-identical; erasure works; retention enforced; CSP locked | yes |
-| **Release manager** | the archive and the version number | manifest 29/29, bundle hash, policy hash, content hash recorded; rollback possible only by choosing an older version | yes |
+| **Engineering reviewer** | determinism, immutability, traceability, access control, data minimisation | enumeration is byte-identical; cross-release context, payload-bound idempotency, run-integrity, erasure, retention and CSP regressions pass | yes |
+| **Release manager** | the archive and the version number | manifest and every release identity recorded; retained API runs resolve exact available artifacts by their pins and fail closed when unavailable | yes |
 
 A signature is not "I glanced at it". It is a dated statement, in the log below, of
 which **version** was reviewed and which **specific claims** the signer verified.
@@ -47,9 +47,11 @@ articles. Nothing in this repository may be described as reviewed.
 4. Write the sign-off rows for that version.
 5. Tag the commit with the three pins (bundle, policy, content).
 
-**Rollback is selection, not editing.** An older version stays loadable forever
-(`load('1.0.0')`, `PinnedScenarios($root, '1.0.0')`); a rollback means choosing it,
-never mutating a newer one in place.
+**Offline rollback is selection, not editing.** The repository loaders can select
+named historical versions (`load('1.0.0')`, `PinnedScenarios($root, '1.0.0')`). The
+public runtime currently constructs one release context and does not select it from
+each run's pins. Until that is implemented, operators must not equate archived
+artefacts with automatic historical-run replay.
 
 ## Deliberately out of scope
 

@@ -100,7 +100,18 @@ final class PinnedScenarios
      */
     private function loadRemapOverlay(): ?array
     {
-        $path = $this->root . '/content/overlays/scenario_option_remap.yaml';
+        $activePath = $this->root . '/content/overlays/scenario_option_remap.yaml';
+        $path = $activePath;
+
+        if ($this->contentVersion !== null && is_file($activePath)) {
+            $active = Yaml::parse((string) file_get_contents($activePath));
+            $activeVersion = (string) ($active['content_version'] ?? '');
+
+            if ($this->contentVersion !== $activeVersion) {
+                $path = $this->root . '/content/overlays/archive/scenario_option_remap-'
+                    . $this->contentVersion . '.yaml';
+            }
+        }
 
         if (!is_file($path)) {
             return null;

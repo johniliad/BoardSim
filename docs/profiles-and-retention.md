@@ -1,7 +1,7 @@
 # Profiles, retention and erasure
 
-Decision status: **share links expire after 7 days** (agreed). Retention default and
-deletion model still open — this document exists to close the second one.
+Decision status: **physical deletion after seven days** and **share expiry capped
+at the oldest included run's deletion deadline**. Sharing never extends retention.
 
 ## 1. What "no data kept unless selected" has to mean
 
@@ -15,16 +15,16 @@ The honest version is a **retention choice made at the end of the run**:
 | Choice | What is stored | How long | Legal basis |
 | --- | --- | --- | --- |
 | Default, not selected | the run and its events, so the results page can be shown | **purged 7 days after finalisation** | necessary to deliver the requested result |
-| "Add to my profile" | the run stays, plus an anonymous profile id in the browser | until the user deletes it | consent |
-| "Share with a link" | a pseudonymous token pointing at the profile segment | **7 days, then dead** | consent |
+| "Add to my profile" | the browser remembers the run id; the server-side run is unchanged | **7 days after finalisation** | consent |
+| "Share with a link" | a pseudonymous token pointing at the selected runs | **up to 7 days, capped at the oldest run's deletion deadline** | consent |
 | Demo (`#/demo`) | nothing at all — no store is ever touched | n/a | n/a |
 
 Three consequences worth stating plainly:
 
-- A run that is purged is **gone**: the share link loses its target, and the
-  profile's aggregate changes because it is recomputed from the runs that remain.
-  Profiles must therefore say "recomputed on <date> from N scenarios", not pretend
-  to be a stable historical figure.
+- A run that is purged is **gone**. New share links are capped so they expire no
+  later than the oldest selected run. Profile resolution returns structured
+  diagnostics; the browser removes confirmed-missing IDs from active selection while
+  keeping result history separate.
 - The share token must be **opaque and unguessable**, not a run id. Run ids are
   already UUIDs, but a token should be independent so revoking it cannot be undone
   by guessing.
@@ -153,14 +153,16 @@ identifier held in this browser, so that three to five scenarios can be combined
 a profile. Kept until you delete it. No name, no email, no account.
 
 ☐ **Create a share link.** Creates an unguessable link that shows your profile to
-anyone who has it. It stops working after **7 days**, and you can revoke it before
-then.
+anyone who has it. It stops working after **at most 7 days**, sooner if the oldest
+selected result reaches its deletion deadline, and you can revoke it before then.
 
 **What is stored:** the scenario identifier, your three choices, the board fields you
 selected, the resulting dimension scores, the total, and the policy and content
-versions used. If you create a share link, the link token and its expiry. That is
-all. No IP address, no device fingerprint, no advertising identifiers, and no free
-text — the board room does not accept free text at all.
+versions used. If you create a share link, the link token and its expiry. The rate
+limiter also keeps a SHA-256 digest derived from the client address for the current
+one-minute window; it does not store the plain address. No device fingerprint,
+advertising identifier or free text is stored — the board room does not accept free
+text at all.
 
 **What is not stored:** the five-minute challenge (nothing is saved), the pages you
 viewed, and anything you typed outside the structured board fields.
@@ -219,12 +221,13 @@ profile. No name, no email, no account.
 **Each result is still deleted 7 days after you finish it**, even when it is in your
 profile. A profile needs three to five scenarios, so it has to be completed inside
 that week — the profile page shows how many days you have left on your oldest result.
-If a result expires, the profile is recalculated from the ones that remain and says
-how many that is.
+If a result expires, profile resolution reports it as missing and the browser removes
+it from active profile selection. Remembered history is separate from the bounded
+selection submitted to the API.
 
 ☐ **Create a share link.** Creates an unguessable link that shows your profile to
-anyone who has it. It stops working after **7 days** — the same seven days — and you
-can revoke it sooner.
+anyone who has it. It stops working after **at most 7 days** and never later than
+the oldest selected result. Sharing does not restart or extend retention.
 
 **You can delete any result yourself, immediately and permanently.** The results page
 has a delete button. It removes the run, your three decisions and your board
@@ -233,21 +236,25 @@ it from the live system, and we will not restore it on request. A copy may remai
 backup for up to 7 days, until that backup rotates; it is not used for anything and is not
 recoverable through any interface we offer.
 
-Because the record is gone, a deleted result can no longer be replayed or verified.
-That is not a fault: it is what deletion means. If a deleted result was part of a
-profile, the profile is recalculated from the scenarios that remain, and the profile
-page shows how many that is.
+Because the record is gone, a deleted result can no longer be opened or checked.
+That is not a fault: it is what deletion means. Deleting from the result page also
+removes the run from this browser's history and active profile selection.
 
 **One thing to be aware of:** your result lives at a web address that contains its
 run identifier. Anyone you give that address to can open the result **and delete it**.
-Treat it like a document link. Share links are separate, expire after 7 days, and can
-be revoked without deleting anything.
+Treat it like a document link. Share links are separate, last at most 7 days (and no
+later than the oldest run deadline), and can be revoked without deleting anything.
+The browser manages one active share token. Creating a replacement revokes the old
+link first. “Forget everything” also revokes the active link before clearing local
+history and selection; if revocation fails, local state is retained so it can retry.
 
 **What is stored:** the scenario identifier, your three choices, the board fields you
 selected, the dimension scores, the total, and the policy and content versions used.
-If you create a share link, the link token and its expiry. That is all. No IP
-address, no device fingerprint, no advertising identifiers, and no free text — the
-board room does not accept free text at all.
+If you create a share link, the link token hash and its expiry. The application rate
+limiter also keeps a SHA-256 digest derived from the client address for the current
+one-minute window; it does not store the plain address. No device fingerprint,
+advertising identifier or free text is stored — the board room does not accept free
+text at all.
 
 **What is never stored:** the five-minute challenge (nothing is saved), the pages you
 viewed, and anything typed outside the structured board fields.

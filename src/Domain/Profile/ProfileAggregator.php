@@ -35,6 +35,7 @@ final class ProfileAggregator
         private readonly RunStore $store,
         private readonly array $content,
         private readonly int $retentionDays = 7,
+        private readonly mixed $releaseCompatible = null,
     ) {
     }
 
@@ -53,31 +54,45 @@ final class ProfileAggregator
 
         $buckets = [];
         $allRuns = [];
+        $selection = [
+            'submitted_run_ids' => $runIds,
+            'accepted_run_ids' => [],
+            'missing_run_ids' => [],
+            'unfinished_run_ids' => [],
+            'incompatible_run_ids' => [],
+        ];
 
         foreach ($runIds as $runId) {
             $run = $this->store->find($runId);
 
             if ($run === null) {
-                throw DomainError::notFound('Run', $runId);
+                $selection['missing_run_ids'][] = $runId;
+                continue;
             }
 
             if ((string) $run['state'] !== RunState::Finalized->value) {
-                throw DomainError::conflict(
-                    "Run {$runId} is {$run['state']}; only finalized runs can be aggregated"
-                );
+                $selection['unfinished_run_ids'][] = $runId;
+                continue;
+            }
+
+            if (is_callable($this->releaseCompatible) && !($this->releaseCompatible)($run)) {
+                $selection['incompatible_run_ids'][] = $runId;
+                continue;
             }
 
             // Segments are keyed on everything that changes the meaning of a
             // score. Merging any two of these would be a silent comparability
             // claim that the policy does not support.
             $key = implode('|', [
-                (string) $run['ruleset_version'],
-                (string) $run['content_version'],
+                (string) $run['policy_sha256'],
+                (string) $run['content_sha256'],
+                (string) $run['difficulty_views_sha256'],
                 (string) $run['difficulty'],
             ]);
 
             $buckets[$key][] = $run;
             $allRuns[] = $run;
+            $selection['accepted_run_ids'][] = $runId;
         }
 
         $segments = [];
@@ -92,9 +107,11 @@ final class ProfileAggregator
             'segments' => $segments,
             'segments_count' => count($segments),
             'merged_across_versions' => false,
+            'selection' => $selection,
             'retention' => $this->retentionWindow($allRuns),
-            'note' => 'Segment keys are ruleset version, scenario content version and difficulty. '
-                . 'Scores are never merged across any of them. Comparability between participants '
+            'note' => 'Segment keys use exact policy, content and difficulty-view hashes plus difficulty. '
+                . 'Missing, unfinished and release-incompatible runs are reported separately rather than '
+                . 'breaking the whole profile. Comparability between participants '
                 . 'is unvalidated; this is a self-development simulation, not an assessment.',
             'governance' => [
                 'source_kind' => 'SIMULATION_ASSUMPTION',
@@ -158,7 +175,11 @@ final class ProfileAggregator
         $base = [
             'segment' => $segment,
             'ruleset_version' => (string) $first['ruleset_version'],
+            'policy_sha256' => (string) $first['policy_sha256'],
             'content_version' => (string) $first['content_version'],
+            'content_sha256' => (string) $first['content_sha256'],
+            'difficulty_views_version' => (string) $first['difficulty_views_version'],
+            'difficulty_views_sha256' => (string) $first['difficulty_views_sha256'],
             'difficulty' => (string) $first['difficulty'],
             'runs' => $count,
             'caveats' => [],

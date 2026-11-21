@@ -14,6 +14,30 @@ namespace BoardSim\Domain\Run;
 interface RunStore
 {
     /**
+     * Execute a run mutation atomically.
+     *
+     * Production stores must commit every write performed by the callback
+     * together, or roll all of them back when it throws. Development stores
+     * mirror that contract with snapshots so service tests exercise the same
+     * failure semantics as MySQL.
+     *
+     * @template T
+     * @param callable(): T $operation
+     * @return T
+     */
+    public function transaction(callable $operation): mixed;
+
+    /**
+     * Read a run while holding the store's mutation lock for it.
+     *
+     * Must be called inside transaction(). MySQL implements this with
+     * SELECT ... FOR UPDATE; single-process stores return their current copy.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function findForUpdate(string $runId): ?array;
+
+    /**
      * Erase a run and everything attached to it.
      *
      * The one destructive operation here, and it is deliberate: 06 requires
@@ -27,7 +51,7 @@ interface RunStore
     public function delete(string $runId): int;
 
     /**
-     * Physically delete every run whose last activity precedes the cutoff.
+     * Physically delete every run whose retention timestamp precedes the cutoff.
      *
      * Used by the retention job, not by the API. Same rules as `delete()`: real
      * removal, no tombstone, and anything attached to the run goes with it.

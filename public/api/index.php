@@ -6,7 +6,9 @@ declare(strict_types=1);
  * BoardSim API front controller.
  *
  * The server is authoritative: the client submits a choice id and an idempotency
- * key, and every number in the response is derived from pinned inputs.
+ * key, and every number in the response is derived from the release currently
+ * loaded by the server. Run pins are recorded provenance; they do not yet select
+ * a historical release context.
  *
  * BOARDSIM_DEV=1 swaps the MySQL store for the in-memory one and reports
  * mode=dev on /v1/health. It exists so the front end can be developed without a
@@ -54,9 +56,12 @@ use BoardSim\Content\OverlayLoader;
 use BoardSim\Content\PinnedScenarios;
 use BoardSim\Content\ScoringPolicyLoader;
 use BoardSim\Domain\Run\FileRunStore;
+use BoardSim\Domain\Run\DomainError;
 use BoardSim\Domain\Run\RunService;
 use BoardSim\Domain\Run\RunStore;
 use BoardSim\Http\ApiRouter;
+use BoardSim\Http\ClientAddress;
+use BoardSim\Http\RequestBody;
 use BoardSim\Http\SecurityHeaders;
 use BoardSim\Infrastructure\DatabaseHandle;
 use BoardSim\Infrastructure\MysqlRunStore;
@@ -76,26 +81,31 @@ $devMode = getenv('BOARDSIM_DEV') === '1';
 
 SecurityHeaders::emit(SecurityHeaders::forApi());
 
+$method = (string) ($_SERVER['REQUEST_METHOD'] ?? 'GET');
+$uri = (string) ($_SERVER['REQUEST_URI'] ?? '/');
+
+// Reject oversized, excessively nested or non-object JSON before opening a
+// database connection or loading the pinned content bundles. Content-Length is
+// only an early hint; RequestBody also reads at most MAX_BYTES + 1 so a missing
+// or dishonest header cannot bypass the limit.
+try {
+    $body = RequestBody::read($_SERVER);
+} catch (DomainError $e) {
+    http_response_code($e->httpStatus);
+    echo json_encode(
+        $devMode
+            ? ['error' => $e->errorCode, 'message' => $e->getMessage(), 'mode' => 'dev']
+            : ['error' => $e->errorCode],
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT
+    );
+
+    exit;
+}
+
 /**
  * @return array{0: int, 1: mixed}
  */
-$route = static function (ApiRouter $router) use ($devMode): array {
-    $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-    $uri = (string) ($_SERVER['REQUEST_URI'] ?? '/');
-    $raw = file_get_contents('php://input');
-
-    if ($raw === false || trim($raw) === '') {
-        $body = [];
-    } else {
-        $decoded = json_decode($raw, true);
-
-        if (!is_array($decoded)) {
-            return [400, ['error' => 'INVALID_JSON', 'message' => 'Body must be a JSON object']];
-        }
-
-        $body = $decoded;
-    }
-
+$route = static function (ApiRouter $router) use ($body, $devMode, $method, $uri): array {
     [$status, $payload] = $router->handle($method, $uri, $body);
 
     if ($devMode && is_array($payload)) {
@@ -134,7 +144,9 @@ try {
 
             // The product has no login, so an unbounded POST is an unbounded
             // write. Enforced here, in the front controller, because this is the
-            // only place that sees a real client address.
+            // only place that sees a real client address. Cloudflare supplies
+            // CF-Connecting-IP at the locked origin; REMOTE_ADDR is the local or
+            // non-Cloudflare fallback.
             //
             // Fails open on purpose: if the rate-limit table is missing or the
             // counter query errors, the API must still answer. Availability of
@@ -142,7 +154,7 @@ try {
             // logged for the operator.
             try {
                 $verdict = (new RateLimiter(new MysqlRateLimitStore($pdo)))->check(
-                    (string) ($_SERVER['REMOTE_ADDR'] ?? 'unknown'),
+                    ClientAddress::fromServer($_SERVER),
                     RateLimiter::actionFor(
                         (string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'),
                         (string) ($_SERVER['REQUEST_URI'] ?? '/')
@@ -173,7 +185,7 @@ try {
             $shareStore = $store;
         }
 
-        $integrity = ['hash_chain']; // add 'db_grants' / 'guard_trigger' once verified
+        $integrity = ['hash_chain']; // add 'db_grants' / 'no_update_trigger' once verified
     }
 
     $pinned = new PinnedScenarios($root);

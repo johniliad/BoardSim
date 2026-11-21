@@ -51,8 +51,26 @@ final class ScoringPolicyLoader
 
         $this->validateConfig($config);
 
-        $calibration = $this->loadCalibration();
+        $activeCalibration = $this->loadCalibration();
         $pinnedVersion = (string) $config['ruleset_version'];
+        $calibration = $activeCalibration;
+
+        if ($version !== null
+            && $version !== $pinnedVersion
+            && ($activeCalibration === null || $version !== $activeCalibration['ruleset_version'])
+        ) {
+            $calibration = $this->loadCalibration($version);
+
+            if ($calibration === null) {
+                $available = array_filter([
+                    $pinnedVersion,
+                    $activeCalibration['ruleset_version'] ?? null,
+                ]);
+                throw new RuntimeException(
+                    "UnknownRulesetVersion: '{$version}'; available: " . implode(', ', $available)
+                );
+            }
+        }
 
         if ($calibration === null) {
             if ($version !== null && $version !== $pinnedVersion) {
@@ -120,9 +138,11 @@ final class ScoringPolicyLoader
      *
      * @return array<string, mixed>|null
      */
-    private function loadCalibration(): ?array
+    private function loadCalibration(?string $version = null): ?array
     {
-        $path = $this->projectRoot . '/content/overlays/scoring_calibration.yaml';
+        $path = $version === null
+            ? $this->projectRoot . '/content/overlays/scoring_calibration.yaml'
+            : $this->projectRoot . '/content/overlays/archive/scoring_calibration-' . $version . '.yaml';
 
         if (!is_file($path)) {
             return null;

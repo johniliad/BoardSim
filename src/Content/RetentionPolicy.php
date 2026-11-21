@@ -11,9 +11,9 @@ use RuntimeException;
  *
  * The values are a decision, not an implementation detail, so they live in a
  * versioned overlay rather than in a constant somewhere. The loader enforces the
- * decision's shape: a share link may never outlive the data it points at, and a
- * profile window may never exceed the retention ceiling, because a profile that
- * outlives its runs would silently lose participants.
+ * decision's shape. ShareService caps each link at the earliest included run's
+ * deletion deadline, and a profile window may never exceed the retention ceiling,
+ * because a profile that outlives its runs would silently lose participants.
  */
 final class RetentionPolicy
 {
@@ -52,15 +52,6 @@ final class RetentionPolicy
 
         if ($share <= 0 || $runs <= 0) {
             throw new RuntimeException('retention.yaml must set positive share_ttl_days and run_retention_days');
-        }
-
-        // A link that outlives its payload is a broken link, and a promise we
-        // cannot keep. The ceiling must never be below the link lifetime.
-        if ($runs < $share) {
-            throw new RuntimeException(
-                "retention.yaml: run_retention_days ({$runs}) is below share_ttl_days ({$share}); "
-                . 'a live link would point at purged data'
-            );
         }
 
         if ($window > $runs) {
@@ -112,7 +103,7 @@ final class RetentionPolicy
             'run_retention_days' => $this->runRetentionDays,
             'profile_window_days' => $this->profileWindowDays,
             'delete_model' => $this->deleteModel,
-            'clock' => 'last_activity',
+            'clock' => 'finalized_at_or_created_at',
             // The number a participant should actually be told. Deletion is complete
             // in the live system at the ceiling, but backups include these tables, so a
             // copy can persist until the backup rotates.

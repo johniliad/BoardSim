@@ -374,7 +374,7 @@ foreach ($scores as $scenarioId => $paths) {
     printf("  %s  A=%2d  B=%2d  C=%2d\n", $scenarioId, $paths['AAA'], $paths['BBB'], $paths['CCC']);
 }
 
-echo "\n== Calibrated ruleset 1.1.0 ==\n";
+echo "\n== Current calibrated ruleset 1.3.2 ==\n";
 $calibrated = (new ScoringPolicyLoader($root))->load();
 $calibratedBuilder = new FiringBuilder($lookup, $calibrated['ruleset'], $resolver);
 $calibratedCalculator = $calibrated['calculator'];
@@ -412,7 +412,7 @@ $calibratedBoard = $calibratedBuilder->forBoard($boardSelections(true), $calibra
 $calibratedFirings = array_merge($calibratedFirings, $calibratedBoard['firings']);
 $calibratedResult = $calibratedCalculator->calculate($calibratedFirings, 'balanced');
 
-printf("  BS-001 A,A,A under 1.1.0: numerator=%d score=%d label=%s\n",
+printf("  BS-001 A,A,A under 1.3.2: numerator=%d score=%d label=%s\n",
     $calibratedResult['numerator'],
     $calibratedResult['score'],
     (string) $calibratedResult['label']
