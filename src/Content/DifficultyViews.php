@@ -90,12 +90,21 @@ final class DifficultyViews
         );
     }
 
-    public static function load(string $projectRoot): self
+    public static function load(string $projectRoot, ?string $version = null): self
     {
-        $path = $projectRoot . '/content/overlays/difficulty_views.yaml';
+        $activePath = $projectRoot . '/content/overlays/difficulty_views.yaml';
+        $path = $activePath;
+
+        if ($version !== null && is_file($activePath)) {
+            $active = Yaml::parse((string) file_get_contents($activePath));
+
+            if ((string) ($active['version'] ?? '') !== $version) {
+                $path = $projectRoot . '/content/overlays/archive/difficulty_views-' . $version . '.yaml';
+            }
+        }
 
         if (!is_file($path)) {
-            throw new RuntimeException('Missing content/overlays/difficulty_views.yaml');
+            throw new RuntimeException('Missing difficulty views for version ' . ($version ?? 'active'));
         }
 
         $doc = Yaml::parse((string) file_get_contents($path));

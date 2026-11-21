@@ -134,7 +134,7 @@ function DemoBody({
         <p>
           A scored run adds the three things this challenge leaves out: regulatory guards that can
           suppress a rule, a single clamp per dimension, and one integer total. It also stores an
-          append-only record you can replay.
+          stored event record and a result explanation.
         </p>
         <p className="bs-kpi__meta">
           Nothing from this challenge was saved. There is no profile entry and nothing to delete.

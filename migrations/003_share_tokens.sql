@@ -8,10 +8,10 @@
 -- The raw token is never stored. Only its SHA-256 is, so a database read cannot
 -- reconstruct a working link.
 --
--- Expiry is a hard 7 days (content/overlays/retention.yaml,
--- share_ttl_days) and is enforced in code as well as here. bin/purge.php removes
--- dead rows; the WHERE clause below is the schema's own reminder that nothing is
--- truncated.
+-- Expiry is at most 7 days (content/overlays/retention.yaml, share_ttl_days) and
+-- is capped in code at the earliest included run's deletion deadline. bin/purge.php
+-- removes dead rows; the WHERE clause below is the schema's own reminder that
+-- nothing is truncated.
 --
 -- Verify before relying on it: this migration, like 001 and 002, has never been
 -- run against a live MySQL.

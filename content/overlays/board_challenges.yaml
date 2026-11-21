@@ -11,7 +11,7 @@
 # They are scenario-agnostic on purpose: 42 bespoke cards (3 x 14 scenarios) would
 # be a content project with a sign-off cost, and the questions a real board asks
 # are the same regardless of the fictional industry.
-version: "1.0.0"
+version: "1.3.2"
 kind: board_challenges
 provenance:
   source_kind: SIMULATION_ASSUMPTION

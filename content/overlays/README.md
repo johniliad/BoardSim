@@ -14,8 +14,8 @@ files at load time and never rewrites them.
 | `scenario_regulatory_facts.yaml` | 2 | `REGULATORY_ASSERTION` and `SCENARIO_INJECT` facts per scenario, with the pinned text each value derives from. |
 | `rule_guards.yaml` | 3 | Binds the symbolic guard names carried by the pinned scenarios to concrete instruments. |
 | `board_checklist.yaml` | 4 | The seven board-pack fields as structured choices, each option authored as substantiated or not. Supplies the definition of "substantiated" that `02_SCORING_MODEL.md` requires but does not provide. |
-| `scenario_option_remap.yaml` | content 1.1.0 | Option-to-rule corrections the spec README sanctions. Two mis-mappings fixed; the remaining dominance is documented in `docs/dominance-register.md`. |
-| `scoring_calibration.yaml` | ruleset 1.1.0 | Rebalanced deltas, widened appetite modifiers, re-anchored score ladder. Never applied to a 1.0.0 run. |
+| `scenario_option_remap.yaml` | content 1.3.2 | Current option-to-rule corrections, including the changes first introduced in content 1.1.0. Historical runs resolve their exact retained content release. |
+| `scoring_calibration.yaml` | ruleset 1.3.2 | Current rebalanced deltas, appetite modifiers and score ladder. Historical runs resolve their exact retained ruleset and a 1.0.0 run never receives this calibration. |
 | `difficulty_views.yaml` | 5 | `leadership` / `executive` / `board_crisis` as read-only projections. The executive board subset is 4 fields instead of 7, which genuinely lowers the attainable score; `board_crisis` is unavailable and rejected with 422. |
 
 ## Deliberate divergences from the first F-2 draft, and why

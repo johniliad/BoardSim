@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 /**
  * Retention job. Physically deletes every run past the ceiling in
- * content/overlays/retention.yaml (7 days from last activity).
+ * content/overlays/retention.yaml (7 days from finalisation, or creation for an
+ * abandoned run).
  *
  * Intended for cron, not for the public API:
  *

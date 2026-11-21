@@ -42,14 +42,17 @@ decision and its trace.
 
 ## Methodology
 
-**Server-authoritative and deterministic.** The browser is a pure renderer: it
-never computes a score, never receives score deltas and cannot influence the
-number. Every figure is derived on the server from pinned inputs, so the same
-decisions always produce the same score — no model, no randomness, no hindsight.
+**Server-authoritative and deterministic for the run's pinned release.** The browser
+never computes a score, never receives hidden score deltas and cannot influence
+the number. The server resolves the policy, content, regulatory and difficulty
+identities pinned to the run, with no model or randomness. Retained historical
+policy/content versions are loaded and hash-checked; if any exact required artifact
+is unavailable, interpretation fails with `RUN_RELEASE_UNAVAILABLE` rather than
+silently mixing releases.
 
-**The exercise.** Fourteen board-level scenarios, each four stages deep with
-three options per stage. A run records every decision behind an idempotency key,
-then the board brief: seven substantiated fields in the `leadership` view
+**The exercise.** Fourteen board-level scenarios, each with three decision stages
+and three options per stage, followed by a board pack. A run records every
+decision behind an idempotency key, then the board brief: seven substantiated fields in the `leadership` view
 (situation, impact, uncertainty, action, funding, residual risk, board ask) or
 four in the `executive` view. `board_crisis` is a declared refusal: the API
 answers 422 rather than score an unvalidated configuration.
@@ -82,14 +85,15 @@ and reporting duties — never from the option picked and never as a score input
 Where the facts do not establish scope, the status is "pending classification",
 not a guess, and instruments that require counsel remain marked as such.
 
-**Reproducibility and integrity.** Every run stores the SHA-256 of the scoring
-policy, the regulatory bundle and the scenario content, so a score can be
-recomputed years later even after the policy is revised. The event log is
-hash-chained and the verification chain is checked on every explain. "What
-would change it?" substitutes an alternative choice, replays it and
-identity-checks the recomputation against the recorded score. Portfolios
-aggregate 3–5 runs, segmented by ruleset, content and difficulty — baselines
-are never merged across versions.
+**Reproducibility and integrity.** Every run pins the scoring policy, regulatory
+bundle, scenario content and difficulty projection. Decision events snapshot the
+authored option label and non-scoring effects. The integrity check recomputes every
+persisted event hash, state-transition continuity, the hashed run row, board
+selections, dimensions and final score through the matching release. It is a
+consistency proof, not a digital signature against a privileged attacker able to
+rewrite data and hashes coherently. "What would change it?" substitutes an
+alternative choice through the same pinned release. Portfolios aggregate 3–5 runs
+per segment keyed by exact policy, content and difficulty-view hashes plus difficulty.
 
 **Calibrated against itself, and only against itself.** The full option space —
 2,268 enumerated runs — reproduces the published goldens exactly; the 1.1.0
@@ -119,15 +123,15 @@ on a fresh clone.
 |---|---|
 | Pinned specification (29 files) | Verified, 29/29 hashes match |
 | YAML allowlist parser | Done — parses all 14 scenarios, both policy blocks, flow collections |
-| Content overlay layer (F-2 / F-1) | Done — bundle `1.1.0`, fail-closed |
+| Content overlay layer (F-2 / F-1) | Done — current bundle `1.3.2`, historical releases retained, fail-closed |
 | Regulatory evaluator, Kleene logic, clock engine | Done — 67 invariants green |
 | Layer 2 facts | Done — all 14 scenarios, all five statuses exercised |
 | **Scoring engine (Stage 2)** | **Done — both published goldens reproduce exactly** |
 | **Board-pack rubric** | **Done — 7 fields, DR-041..DR-047 gated on substantiation** |
 | **Enumeration (Stage 3)** | **Done — 2,268 runs reproduce min 58 / max 84 / mean 71.15** |
-| **Calibration (ruleset 1.1.0)** | **Done — positional bias −35%, all five score labels reachable** |
+| **Calibration (current ruleset 1.3.2)** | **Done — includes the 1.1.0 rebalance; positional bias −35%, all five score labels reachable** |
 | **Content v1.1.0 (option remaps)** | **Done — 2 mis-mappings corrected; dominance register published** |
-| **Content 1.3.0 (executive wording)** | **Done — all 14 scenarios rewritten to an executive register (BLUF, board-level asks); mappings, effects and scores unchanged; 28/42 dominant re-confirmed** |
+| **Content 1.3.2 (current release)** | **Done — retains the 1.3.0 executive wording across all 14 scenarios; mappings, effects and scores unchanged; 28/42 dominant re-confirmed** |
 | **Content 1.2.0 (dominance)** | **Done — 3 narrow gaps closed, 31→28 dominant; mean 70.78/70.44, all five bands reachable** |
 | **API + MySQL store (Stage 4)** | **Done — 99 invariants green; MySQL adapter unverified on host** |
 | **SPA (Stage 5)** | **Done — builds, serves same-origin, full run verified over HTTP** |
@@ -180,7 +184,7 @@ built `public/app/index.html` through a plain static file server (or through a
 server rooted at `public/app`) serves the SPA's HTML for `/v1/...` and fails the
 same way. The interface and the API must be served from one origin by PHP.
 
-Three artefacts are pinned per run and never merged:
+Three artefact identities are recorded per run:
 
 | Pin | 1.0.0 | Latest | Contents |
 |---|---|---|---|
@@ -188,8 +192,11 @@ Three artefacts are pinned per run and never merged:
 | Scoring policy | `dd533b45…` | `b2135b59…` | rules, weights, appetite, board rubric, ladder |
 | Scenario content | pinned option graph | option remaps | scenario versions + mapping corrections |
 
-A run pins all three, so it replays against exactly the policy that scored it.
-`load('1.0.0')` and `PinnedScenarios($root, '1.0.0')` remain available forever.
+A run stores all release identities, including the difficulty-view version/hash.
+`RunService` selects a per-run context: retained historical policy and content are
+loaded by version and verified by hash, while regulatory and difficulty artifacts
+must match an available exact hash. Missing or mismatched artifacts produce
+`RUN_RELEASE_UNAVAILABLE`; they are never replaced with the current release.
 
 Calibration evidence lives in [`docs/calibration-findings.md`](docs/calibration-findings.md)
 and the required re-score report in
@@ -205,7 +212,7 @@ two views must never be merged into one profile.
 
 ```bash
 php bin/dev.php                  # local server with router + dev store
-php bin/build-deploy.php --version=1.2.0   # two upload folders + zips (host needs no shell)
+php bin/build-deploy.php --version=1.3.2   # two upload folders + zips (host needs no shell)
 php bin/migrate.php --check      # schema + pinned-bundle reconciliation (run from cron)
 php bin/verify-hygiene.php       # no host paths committed
 php bin/verify-manifest.php      # re-hash the 29 pinned files
@@ -270,10 +277,12 @@ ever reaches the repository.
 SOURCE migrations/001_init.sql;
 SOURCE migrations/002_events.sql;
 SOURCE migrations/003_share_tokens.sql;
+SOURCE migrations/004_rate_limits.sql;
+SOURCE migrations/005_release_integrity.sql;
 ```
 
 Then follow `migrations/README.md` for the least-privilege grants and the optional
-append-only trigger. `GET /v1/health` reports which integrity controls are active,
+no-update event trigger. `GET /v1/health` reports which integrity controls are active,
 so the methodology page never claims more than the deployment provides.
 
 ## License

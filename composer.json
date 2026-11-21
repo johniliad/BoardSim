@@ -20,6 +20,7 @@
   },
   "scripts": {
     "manifest": "php bin/verify-manifest.php",
+    "migrations": "php bin/verify-migrations.php",
     "hygiene": "php bin/verify-hygiene.php",
     "content": "php bin/content-build.php --check",
     "glossary": "php bin/verify-glossary.php",
@@ -41,6 +42,7 @@
     "check": [
       "@hygiene",
       "@manifest",
+      "@migrations",
       "@yaml",
       "@policy",
       "@content",

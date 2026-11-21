@@ -40,3 +40,22 @@ Do not use LLM to write the factual body from scratch. Server renders the calcul
 
 ## Methodological limits
 This is a **simulated executive decision self-development aid**: its fictional cases, invented weights and authored decisions have not been validated as psychometric, hiring, promotion or regulatory-compliance assessment instruments. Multiple choices can be defensible. Later events cannot demonstrate that earlier decisions were necessarily wrong. Scores are relative to the published BoardSim policy, not universal executive competence.
+
+## Current implementation behavior and limits
+
+- Explanation and counterfactual endpoints resolve the release matching the run's
+  pins. Retained historical policy/content are loaded and hash-checked; unavailable
+  exact regulatory/difficulty artifacts fail closed with `RUN_RELEASE_UNAVAILABLE`.
+- Decision labels and authored non-scoring effects are snapshotted in each event and
+  included in its integrity hash.
+- The response distinguishes `stored_score`, `reconstructed_score` and
+  `score_verified`, and returns structured score/dimension verification diagnostics.
+  Dimension maps are compared as a closed set of ten named integer values, independent
+  of JSON object key order. Run integrity also verifies board selections and the hashed
+  run state. This is not a digital signature against coherent privileged rewriting.
+- The result page explains Band and Run integrity through accessible hover, focus and
+  touch/click popovers. A failed consistency check is shown as `Could not verify`, not
+  as a judgment about the participant's choices.
+- The public glossary describes the currently deployed catalogue. Historical run
+  arithmetic and rule resolution use the run's release context, while human-readable
+  glossary names may reflect the current catalogue.

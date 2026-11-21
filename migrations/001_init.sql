@@ -10,12 +10,13 @@
 --     collation is case- and accent-insensitive, so a tamper check comparing
 --     hashes under it could treat two different digests as equal.
 --
---  3. The append-only guarantee is enforced by grants and a trigger, not by
---     convention. See migrations/README.md for the privilege statements.
+--  3. Event immutability is enforced by denying UPDATE and, where available, an
+--     UPDATE guard trigger. Whole-run DELETE remains permitted for physical
+--     erasure. See migrations/README.md for the privilege statements.
 --
---  4. A run pins four hashes: regulatory bundle, scoring policy, scenario
---     content, and its own chained state. A run created under ruleset 1.1.0
---     replays under 1.1.0 forever.
+--  4. This historical base migration is left structurally unchanged. Later
+--     release-integrity columns are added by 005_release_integrity.sql, so a fresh
+--     install and an upgraded install follow the same ordered migration path.
 
 CREATE TABLE IF NOT EXISTS content_bundles (
   bundle_sha256         CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,

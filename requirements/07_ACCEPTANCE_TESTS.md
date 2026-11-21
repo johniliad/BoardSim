@@ -4,7 +4,7 @@
 The illustrative ten dimension values `80,70,75,75,70,70,70,65,70,65` at weights `12,12,14,14,10,8,10,8,7,5` produce numerator 7195 and score **72** (half-up integer). Test `raw=101→100`, `raw=-1→0`; no rounding before aggregate. Assert score is in [0,100]. Assert weights sum to 100; all rule deltas are integers and all IDs unique.
 
 ## Scenario graph golden
-For each of BS-001..BS-014: each stage has exactly A/B/C; selected option has nonempty valid rule IDs; exactly 3 stages, 27 choice vectors; check all option sequences replay identically. One option submitted twice with same idempotency key must not double-score; wrong stage must reject; unrecognized option must reject. Test serializations are canonical; preserve data across restart; scores invariant under map key ordering.
+For each of BS-001..BS-014: each stage has exactly A/B/C; selected option has nonempty valid rule IDs; exactly 3 stages, 27 choice vectors; check all option sequences recompute identically. One option submitted twice with the same idempotency key must not double-score; the same key with a different stage or choice must reject. Wrong stage must reject; unrecognized option must reject. Test serializations are canonical; preserve data across restart; scores invariant under map key ordering.
 
 ## Explanation correctness
 For every rule firing, render positive and negative deltas, pre/post values, risk modifier, evidence, source type and stage. Every printed number must equal engine data. All DR links resolve to `03_DECISION_RULES.md`; legal links resolve to official URLs; explain panel includes policy version/hash, methodology and consequences distinct from point totals. A language-model response containing wrong score or extra legal assertion must be discarded.
@@ -31,7 +31,7 @@ for scenario in catalog:
 ```
 
 ## Tamper/authoring regression
-Changing a rule delta in a new policy must produce **only** the documented corresponding dimension change and derived overall change; old archived scores unchanged. Editing risk modifiers affects only RJ and only matching DR IDs. Altering an LLM prompt cannot change any replay result. A legal register source update does not silently change a pinned run.
+Changing a rule delta in a new policy must produce **only** the documented corresponding dimension change and derived overall change; stored final scores are not rewritten. Editing risk modifiers affects only RJ and only matching DR IDs. Altering an LLM prompt cannot change a recomputation. Cross-release tests create a run under release A, continue and explain it through release B, and require exact release-A loading or explicit `RUN_RELEASE_UNAVAILABLE`. Tamper tests cover event evidence, transition links, run configuration, board selections, score and dimensions.
 
 ## Launch blockers
 Do not launch assessed free-form prose grading, national legal deadline assertions, psychometric employment claims or AI Act/Greek law compliance certifications without additional validated specifications. Do not use unreviewed ENISA workbook mappings as if article-level binding requirements. Check actual live URL redirects and legal consolidation before public publication.

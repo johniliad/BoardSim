@@ -67,9 +67,11 @@ Arithmetic follows `02_SCORING_MODEL.md` exactly:
   unratified number;
 - the window is **3 to 5** completed scenarios.
 
-Segmentation. A segment key is `ruleset_version | content_version | difficulty`.
-Scores are never merged across any component of that key, because each changes what
-a score means:
+Current segmentation. A segment key is
+`ruleset_version | content_version | difficulty`. Scores are not merged across
+different labels in that key. The exact policy/content hashes and the difficulty-
+view hash are not part of the key, so this is version-label separation rather than
+cryptographic identity separation:
 
 - a ruleset change moves the weights or the calibration;
 - a content change moves option semantics;
@@ -83,9 +85,10 @@ Behaviour at the edges:
 | 3–5 runs in a segment | `eligible` | produced |
 | fewer than 3 | `insufficient` | `null` — no number is fabricated |
 | more than 5 | `over_window` | `null` — the caller must choose which runs |
-| run not finalized | 409 | — |
-| unknown run | 404 | — |
+| run not finalized | diagnostic: `unfinished_run_ids` | excluded |
+| unknown run | diagnostic: `missing_run_ids` | excluded |
 | empty list | 400 | — |
+| more than 20 submitted run IDs | 400 | — |
 
 The over-window case is refused rather than truncated because `02_SCORING_MODEL.md`
 defines the window but not a selection rule for run six onwards. Picking "the most
@@ -103,3 +106,8 @@ most likely artefact to be forwarded as if it were an assessment.
 
 Demo runs are excluded by construction: the five-minute demo is public and
 unscored, so it never reaches the run store.
+
+The browser separates remembered result history from active profile selection.
+Selection is capped at the API's 20-entry limit, and structured diagnostics identify
+missing, unfinished and release-incompatible runs. Confirmed-missing IDs are removed
+from active selection without discarding unrelated valid results.

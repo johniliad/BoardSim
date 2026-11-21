@@ -22,6 +22,7 @@ use BoardSim\Domain\Run\DomainError;
 use BoardSim\Domain\Run\InMemoryRunStore;
 use BoardSim\Domain\Run\RunService;
 use BoardSim\Domain\Run\RunState;
+use BoardSim\Domain\Scoring\DimensionComparison;
 
 final class A
 {
@@ -105,7 +106,7 @@ $board = static function (bool $substantiated) use ($policy): array {
 
 echo "== Health and pinning ==\n";
 $health = $service->health();
-A::check('health reports the calibrated ruleset', $health['ruleset_version'] === '1.1.0', (string) $health['ruleset_version']);
+A::check('health reports the current ruleset', $health['ruleset_version'] === '1.3.2', (string) $health['ruleset_version']);
 A::check('health exposes the policy hash', $health['policy_sha256'] === $policy['policy_sha256']);
 A::check(
     'health exposes the regulatory bundle hash',
@@ -123,8 +124,13 @@ printf("  policy=%s\n  regulatory=%s\n  content=%s (%s)\n",
 echo "\n== Run creation ==\n";
 $run = $service->create(['scenario_id' => 'BS-001', 'difficulty' => 'leadership']);
 A::check('a new run opens stage 1', $run['state'] === RunState::Stage1Open->value, $run['state']);
-A::check('the run pins ruleset 1.1.0', $run['pins']['ruleset_version'] === '1.1.0');
-A::check('the run pins four hashes', count($run['pins']) === 7, (string) count($run['pins']));
+A::check('the run pins ruleset 1.3.2', $run['pins']['ruleset_version'] === '1.3.2');
+A::check(
+    'the run pins the full release identity',
+    isset($run['pins']['policy_sha256'], $run['pins']['regulatory_bundle_sha256'],
+        $run['pins']['content_sha256'], $run['pins']['difficulty_views_sha256']),
+    (string) count($run['pins'])
+);
 A::check('three bundles are registered', $store->bundleCount() === 3, (string) $store->bundleCount());
 A::check('the run id is a uuid', preg_match('/^[0-9a-f-]{36}$/', (string) $run['run_id']) === 1);
 
@@ -171,6 +177,11 @@ A::check(
     'replay returns the identical event hash',
     $replay['event']['event_sha256'] === $first['event']['event_sha256']
 );
+A::throws(
+    'the same idempotency key cannot be reused for a different decision payload',
+    static fn () => $service->decide($runId, $key1, 'S2', 'B'),
+    409
+);
 
 A::throws(
     'a decision on a closed stage is rejected with 409',
@@ -198,6 +209,38 @@ A::throws(
     404
 );
 
+echo "\n== Atomic decision rollback ==\n";
+[$rollbackService, $rollbackStore] = $makeService(null);
+$rollbackRun = $rollbackService->create(['scenario_id' => 'BS-002', 'difficulty' => 'leadership']);
+$rollbackId = (string) $rollbackRun['run_id'];
+$rollbackStore->failNextUpdateForTest();
+$decisionFailed = false;
+
+try {
+    $rollbackService->decide(
+        $rollbackId,
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        'S1',
+        'A'
+    );
+} catch (RuntimeException) {
+    $decisionFailed = true;
+}
+
+A::check('a late decision write failure is surfaced', $decisionFailed);
+A::check('a failed decision records no event', $rollbackStore->events($rollbackId) === []);
+A::check(
+    'a failed decision leaves stage 1 open',
+    $rollbackService->status($rollbackId)['state'] === RunState::Stage1Open->value
+);
+$decisionRetry = $rollbackService->decide(
+    $rollbackId,
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    'S1',
+    'A'
+);
+A::check('the rolled-back decision succeeds on retry', $decisionRetry['replayed'] === false);
+
 $service->decide($runId, '55555555-5555-4555-8555-555555555555', 'S2', 'A');
 $third = $service->decide($runId, '66666666-6666-4666-8666-666666666666', 'S3', 'A');
 A::check('after stage 3 the board opens', $third['run']['state'] === RunState::BoardOpen->value, $third['run']['state']);
@@ -218,7 +261,7 @@ A::throws(
 $scored = $service->board($runId, $board(true));
 A::check('the run finalises', $scored['run']['state'] === RunState::Finalized->value, $scored['run']['state']);
 A::check('a score is produced', is_int($scored['score']));
-printf("  BS-001 A,A,A under 1.1.0 -> %d (%s)\n", $scored['score'], $scored['label']);
+printf("  BS-001 A,A,A under 1.3.2 -> %d (%s)\n", $scored['score'], $scored['label']);
 A::check('the score matches the published calibration', $scored['score'] === 78, (string) $scored['score']);
 A::check('ten dimensions are stored', count($scored['dimensions']) === 10);
 A::throws(
@@ -232,10 +275,83 @@ A::throws(
     409
 );
 
+echo "\n== Atomic board rollback ==\n";
+[$boardRollbackService, $boardRollbackStore, $boardRollbackPolicy] = $makeService(null);
+$boardRollbackSelections = [];
+foreach ($boardRollbackPolicy['board_fields'] as $field => $definition) {
+    foreach ($definition['options'] as $option) {
+        if (($option['substantiated'] ?? false) === true) {
+            $boardRollbackSelections[$field] = (string) $option['id'];
+            break;
+        }
+    }
+}
+$boardRollbackRun = $boardRollbackService->create(['scenario_id' => 'BS-006', 'difficulty' => 'leadership']);
+$boardRollbackId = (string) $boardRollbackRun['run_id'];
+foreach (['S1', 'S2', 'S3'] as $stage) {
+    $boardRollbackService->decide($boardRollbackId, 'rollback-' . $stage, $stage, 'A');
+}
+$boardRollbackStore->failNextUpdateForTest();
+$boardFailed = false;
+
+try {
+    $boardRollbackService->board($boardRollbackId, $boardRollbackSelections);
+} catch (RuntimeException) {
+    $boardFailed = true;
+}
+
+A::check('a late board write failure is surfaced', $boardFailed);
+A::check('a failed board submission saves no selections', $boardRollbackStore->boardSelections($boardRollbackId) === []);
+A::check(
+    'a failed board submission leaves the board open',
+    $boardRollbackService->status($boardRollbackId)['state'] === RunState::BoardOpen->value
+);
+A::check(
+    'the rolled-back board submission succeeds on retry',
+    $boardRollbackService->board($boardRollbackId, $boardRollbackSelections)['run']['state']
+        === RunState::Finalized->value
+);
+
 echo "\n== Explanation and integrity ==\n";
+$reorderedRun = $store->find($runId);
+$reorderedDimensions = (array) ($reorderedRun['dimensions'] ?? []);
+ksort($reorderedDimensions, SORT_STRING);
+$reorderedRun['dimensions'] = $reorderedDimensions;
+$store->update($reorderedRun);
 $explain = $service->explain($runId);
 A::check('the explanation reproduces the score', $explain['score'] === $scored['score']);
 A::check('the explanation is deterministic in its numerator', $explain['numerator'] > 0);
+A::check('dimension verification ignores persisted JSON key order', $explain['score_verified'] === true);
+A::check('the reordered run still has verified integrity', $explain['chain']['ok'] === true);
+A::check('the score comparison reports an overall match', $explain['score_verification']['score_matches'] === true);
+A::check('the dimension comparison reports a semantic match', $explain['score_verification']['dimensions_match'] === true);
+
+$validDimensions = (array) $explain['reconstructed_dimensions'];
+$changedDimensions = $validDimensions;
+$changedDimensions['SJ']++;
+$missingDimensions = $validDimensions;
+unset($missingDimensions['SJ']);
+$unexpectedDimensions = $validDimensions;
+$unexpectedDimensions['XX'] = 70;
+$invalidDimensions = $validDimensions;
+$invalidDimensions['SJ'] = '86';
+
+A::check(
+    'a changed dimension is rejected',
+    DimensionComparison::compare($changedDimensions, $validDimensions)['mismatched_dimensions'] === ['SJ']
+);
+A::check(
+    'a missing dimension is rejected',
+    DimensionComparison::compare($missingDimensions, $validDimensions)['missing_from_stored'] === ['SJ']
+);
+A::check(
+    'an unexpected dimension is rejected',
+    DimensionComparison::compare($unexpectedDimensions, $validDimensions)['unexpected_in_stored'] === ['XX']
+);
+A::check(
+    'a non-integer dimension is rejected',
+    DimensionComparison::compare($invalidDimensions, $validDimensions)['invalid_in_stored'] === ['SJ']
+);
 
 $traceRules = array_column($explain['trace'], 'rule');
 $eventRules = [];
@@ -249,7 +365,7 @@ A::check(
 );
 A::check('the trace includes board rules', in_array('DR-041', array_column($explain['trace'], 'rule'), true));
 A::check('the chain verifies', $explain['chain']['ok'] === true);
-A::check('the explanation repeats the pins', $explain['pins']['ruleset_version'] === '1.1.0');
+A::check('the explanation repeats the pins', $explain['pins']['ruleset_version'] === '1.3.2');
 A::check('governance flags travel with the export', $explain['governance']['psychometrically_calibrated'] === false);
 
 // 05: the explanation must quote the business consequences, not only the score.
@@ -291,6 +407,21 @@ $tampered = $service->verifyChain($runId);
 A::check('tampering is detected', $tampered['ok'] === false);
 A::check('the first broken event is named', ($tampered['broken_at'] ?? 0) === 2, (string) ($tampered['broken_at'] ?? 0));
 
+// Each newly protected evidence class gets an isolated run so one mutation cannot
+// mask another. These helpers exist only in the in-memory test adapter.
+foreach (['suppressed', 'regulatory_status', 'recorded_at'] as $field) {
+    [$integrityService, $integrityStore] = $makeService(null);
+    $integrityRun = $integrityService->create(['scenario_id' => 'BS-003', 'difficulty' => 'leadership']);
+    $integrityId = (string) $integrityRun['run_id'];
+    $integrityService->decide($integrityId, substr(hash('sha256', $field), 0, 36), 'S1', 'A');
+    $replacement = $field === 'recorded_at' ? '2000-01-01T00:00:00Z' : ['tampered' => true];
+    $integrityStore->tamperEventForTest($integrityId, 1, $field, $replacement);
+    A::check(
+        "tampering with {$field} is detected",
+        $integrityService->verifyChain($integrityId)['ok'] === false
+    );
+}
+
 echo "\n== Replay against the pinned 1.0.0 baseline ==\n";
 [$legacyService, $legacyStore, $legacyPolicy] = $makeService('1.0.0', '1.0.0');
 $legacyRun = $legacyService->create(['scenario_id' => 'BS-001', 'difficulty' => 'leadership']);
@@ -308,11 +439,127 @@ A::check(
 );
 
 $legacyService->decide($legacyId, 'aaaaaaaa-1111-4111-8111-111111111111', 'S1', 'A');
-$legacyService->decide($legacyId, 'aaaaaaaa-2222-4222-8222-222222222222', 'S2', 'A');
-$legacyService->decide($legacyId, 'aaaaaaaa-3333-4333-8333-333333333333', 'S3', 'A');
-$legacyScored = $legacyService->board($legacyId, $board(true));
+
+// Re-open the retained 1.0.0 run through the current 1.3.2 service. The service
+// must resolve the run's pinned historical policy/content rather than mixing it
+// with the current release.
+$currentOverLegacy = new RunService(
+    $legacyStore,
+    $regulatory,
+    $policy,
+    $content,
+    $contentVersion,
+    $contentSha,
+    ['hash_chain'],
+    DifficultyViews::load($root),
+    \BoardSim\Content\BoardChallenges::load($root),
+    $root
+);
+$currentOverLegacy->decide($legacyId, 'aaaaaaaa-2222-4222-8222-222222222222', 'S2', 'A');
+$currentOverLegacy->decide($legacyId, 'aaaaaaaa-3333-4333-8333-333333333333', 'S3', 'A');
+$legacyBoard = [];
+foreach ($legacyPolicy['board_fields'] as $field => $definition) {
+    foreach ($definition['options'] as $option) {
+        if (($option['substantiated'] ?? false) === true) {
+            $legacyBoard[$field] = (string) $option['id'];
+            break;
+        }
+    }
+}
+$legacyScored = $currentOverLegacy->board($legacyId, $legacyBoard);
+A::check('the current service continues the run under its 1.0.0 pins', $legacyScored['run']['pins']['ruleset_version'] === '1.0.0');
 A::check('the archived baseline still scores 81', $legacyScored['score'] === 81, (string) $legacyScored['score']);
+$legacyExplain = $currentOverLegacy->explain($legacyId);
+A::check('the current service explains the run with its historical release', $legacyExplain['ruleset_version'] === '1.0.0');
+A::check('the historical score reconstruction verifies', $legacyExplain['score_verified'] === true);
 printf("  BS-001 A,A,A under 1.0.0 -> %d (%s)\n", $legacyScored['score'], $legacyScored['label']);
+
+echo "\n== Replay against the previous 1.1.0 / 1.3.0 production release ==\n";
+$previousStore = new InMemoryRunStore();
+$previousPolicy = (new ScoringPolicyLoader($root))->load('1.1.0');
+$previousPinned = new PinnedScenarios($root, '1.3.0');
+$previousViews = DifficultyViews::load($root, '1.0.0');
+$previousService = new RunService(
+    $previousStore,
+    $regulatory,
+    $previousPolicy,
+    $previousPinned->loadAll(),
+    $previousPinned->contentVersion(),
+    $previousPinned->contentSha256(),
+    ['hash_chain'],
+    $previousViews,
+    \BoardSim\Content\BoardChallenges::load($root),
+    $root
+);
+$previousRun = $previousService->create(['scenario_id' => 'BS-005', 'difficulty' => 'leadership']);
+$previousId = (string) $previousRun['run_id'];
+A::check('the previous run pins ruleset 1.1.0', $previousRun['pins']['ruleset_version'] === '1.1.0');
+A::check('the previous run pins content 1.3.0', $previousRun['pins']['content_version'] === '1.3.0');
+A::check('the previous run pins difficulty views 1.0.0', $previousRun['pins']['difficulty_views_version'] === '1.0.0');
+foreach (['S1', 'S2', 'S3'] as $index => $stage) {
+    $previousService->decide(
+        $previousId,
+        substr(hash('sha256', 'previous-release-' . $stage), 0, 36),
+        $stage,
+        'A'
+    );
+}
+$previousBoard = [];
+foreach ($previousPolicy['board_fields'] as $field => $definition) {
+    foreach ($definition['options'] as $option) {
+        if (($option['substantiated'] ?? false) === true) {
+            $previousBoard[$field] = (string) $option['id'];
+            break;
+        }
+    }
+}
+$previousService->board($previousId, $previousBoard);
+$previousThroughCurrent = new RunService(
+    $previousStore,
+    $regulatory,
+    $policy,
+    $content,
+    $contentVersion,
+    $contentSha,
+    ['hash_chain'],
+    DifficultyViews::load($root),
+    \BoardSim\Content\BoardChallenges::load($root),
+    $root
+);
+$previousExplain = $previousThroughCurrent->explain($previousId);
+A::check('the current service resolves the previous production artifacts', $previousExplain['chain']['ok'] === true);
+A::check('the previous production score reconstructs exactly', $previousExplain['score_verified'] === true);
+
+[$boardIntegrityService, $boardIntegrityStore] = $makeService(null);
+$boardIntegrityRun = $boardIntegrityService->create(['scenario_id' => 'BS-001', 'difficulty' => 'leadership']);
+$boardIntegrityId = (string) $boardIntegrityRun['run_id'];
+foreach (['S1', 'S2', 'S3'] as $index => $stage) {
+    $boardIntegrityService->decide(
+        $boardIntegrityId,
+        substr(hash('sha256', 'board-integrity-' . $stage), 0, 36),
+        $stage,
+        'A'
+    );
+}
+$boardIntegritySelections = [];
+foreach ($policy['board_fields'] as $field => $definition) {
+    foreach ($definition['options'] as $option) {
+        if (($option['substantiated'] ?? false) === true) {
+            $boardIntegritySelections[$field] = (string) $option['id'];
+            break;
+        }
+    }
+}
+$boardIntegrityService->board($boardIntegrityId, $boardIntegritySelections);
+$firstBoardField = array_key_first($boardIntegrityStore->boardSelections($boardIntegrityId));
+$boardIntegrityStore->tamperBoardForTest($boardIntegrityId, (string) $firstBoardField, 'declined');
+A::check('tampering with board selections is detected', $boardIntegrityService->verifyChain($boardIntegrityId)['ok'] === false);
+
+[$runIntegrityService, $runIntegrityStore] = $makeService(null);
+$runIntegrity = $runIntegrityService->create(['scenario_id' => 'BS-001', 'difficulty' => 'leadership']);
+$runIntegrityId = (string) $runIntegrity['run_id'];
+$runIntegrityStore->tamperRunForTest($runIntegrityId, 'risk_appetite', 'aggressive');
+A::check('tampering with scoring-critical run configuration is detected', $runIntegrityService->verifyChain($runIntegrityId)['ok'] === false);
 
 echo "\n== Difficulty is a projection, not cosmetic (F-5) ==\n";
 $views = DifficultyViews::load($root);
@@ -612,10 +859,9 @@ A::check('the board selections are gone', $store->boardSelections($erasureId) ==
 A::throws('the run can no longer be read', static fn () => $service->status($erasureId), 404);
 A::throws('the run can no longer be explained', static fn () => $service->explain($erasureId), 404);
 A::throws('the run cannot be erased twice', static fn () => $service->delete($erasureId), 404);
-A::throws(
-    'an erased run cannot rejoin a profile',
-    static fn () => $service->profile([$erasureId]),
-    404
+A::check(
+    'an erased run is reported as missing without breaking profile resolution',
+    $service->profile([$erasureId])['selection']['missing_run_ids'] === [$erasureId]
 );
 
 // Erasure must not touch anything else.
@@ -649,6 +895,10 @@ A::check(
     (string) $retention['worst_case_days']
 );
 A::check('the policy is versioned and hashed', strlen((string) $retention['sha256']) === 64);
+A::check(
+    'retention is measured from finalisation, with creation as the abandoned-run fallback',
+    $retention['clock'] === 'finalized_at_or_created_at'
+);
 
 $retentionRule = \BoardSim\Content\RetentionPolicy::load($root);
 A::check(
@@ -694,6 +944,63 @@ A::check(
     'the purge reports what it removed',
     count($purgeResult['run_ids']) === 2,
     (string) count($purgeResult['run_ids'])
+);
+
+echo "\n== Share expiry is capped by run retention (Option B) ==\n";
+$shareRuns = [
+    $runToScore($service, 'BS-007', 'leadership', $boardFor),
+    $runToScore($service, 'BS-008', 'leadership', $boardFor),
+    $runToScore($service, 'BS-009', 'leadership', $boardFor),
+];
+$shareRunIds = array_map(static fn (array $entry): string => (string) $entry['id'], $shareRuns);
+
+foreach ($shareRunIds as $shareRunId) {
+    $stored = $store->find($shareRunId);
+    $stored['created_at'] = '2026-11-01T00:00:00Z';
+    $stored['finalized_at'] = '2026-11-01T00:00:00Z';
+    $store->update($stored);
+}
+
+$share = $service->shareCreate($shareRunIds, '2026-11-07T00:00:00Z');
+A::check(
+    'an older profile share expires at the oldest run deadline',
+    $share['expires_at'] === '2026-11-08T00:00:00Z',
+    (string) $share['expires_at']
+);
+A::check('the capped share reports one day remaining', $share['expires_in_days'] === 1);
+A::check(
+    'the capped share resolves before the run deadline',
+    $service->shareResolve((string) $share['token'], '2026-11-07T12:00:00Z')['read_only'] === true
+);
+A::throws(
+    'the capped share is expired after the run deadline',
+    static fn () => $service->shareResolve((string) $share['token'], '2026-11-08T00:00:00Z'),
+    404
+);
+A::throws(
+    'an invalid internal share timestamp is rejected instead of becoming Unix epoch',
+    static fn () => $service->shareResolve((string) $share['token'], 'not-a-timestamp'),
+    400
+);
+
+$expiredShareRuns = [
+    $runToScore($service, 'BS-010', 'leadership', $boardFor),
+    $runToScore($service, 'BS-011', 'leadership', $boardFor),
+    $runToScore($service, 'BS-012', 'leadership', $boardFor),
+];
+$expiredShareIds = array_map(static fn (array $entry): string => (string) $entry['id'], $expiredShareRuns);
+
+foreach ($expiredShareIds as $expiredShareId) {
+    $stored = $store->find($expiredShareId);
+    $stored['created_at'] = '2026-11-01T00:00:00Z';
+    $stored['finalized_at'] = '2026-11-01T00:00:00Z';
+    $store->update($stored);
+}
+
+A::throws(
+    'runs at their retention deadline cannot receive a new share link',
+    static fn () => $service->shareCreate($expiredShareIds, '2026-11-08T00:00:00Z'),
+    400
 );
 printf(
     "  ceiling %d days, share %d days; 0 purged today, %d purged on a simulated +8 days\n",
@@ -837,7 +1144,7 @@ $finish = static function (RunService $svc, string $scenarioId, string $difficul
 
     foreach (['S1' => 'A', 'S2' => 'A', 'S3' => 'A'] as $stage => $choice) {
         $key++;
-        $svc->decide($id, "{$id}-{$key}", $stage, $choice);
+        $svc->decide($id, substr(hash('sha256', $id . '-' . $key), 0, 36), $stage, $choice);
     }
 
     $svc->board($id, $board($difficulty));
@@ -942,18 +1249,19 @@ A::check(
     str_contains(implode(' ', (array) $overWindow['segments'][0]['caveats']), 'Repeated scenario')
 );
 
-A::throws(
-    'an unfinished run is refused with 409',
-    static function () use ($service): void {
-        $created = $service->create(['scenario_id' => 'BS-002', 'difficulty' => 'leadership']);
-        $service->profile([(string) $created['run_id']]);
-    },
-    409
+$unfinished = $service->create(['scenario_id' => 'BS-002', 'difficulty' => 'leadership']);
+$unfinishedProfile = $service->profile([(string) $unfinished['run_id']]);
+A::check(
+    'an unfinished run is reported without breaking the profile',
+    $unfinishedProfile['selection']['unfinished_run_ids'] === [(string) $unfinished['run_id']]
+        && $unfinishedProfile['segments'] === []
 );
-A::throws(
-    'an unknown run is refused with 404',
-    static fn () => $service->profile(['00000000-0000-4000-8000-000000000000']),
-    404
+$missingId = '00000000-0000-4000-8000-000000000000';
+$missingProfile = $service->profile([$missingId]);
+A::check(
+    'an unknown run is reported without breaking the profile',
+    $missingProfile['selection']['missing_run_ids'] === [$missingId]
+        && $missingProfile['segments'] === []
 );
 A::throws(
     'an empty run list is refused with 400',

@@ -1,5 +1,6 @@
--- Append-only decision log. The API user holds INSERT and SELECT only; see
--- migrations/README.md for the grants and the guard trigger.
+-- Immutable-within-a-run decision log. The API user holds SELECT, INSERT and
+-- whole-run DELETE, but never UPDATE; see migrations/README.md for the grants and
+-- no-update guard trigger.
 CREATE TABLE IF NOT EXISTS run_events (
   run_id              CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   sequence            INT UNSIGNED NOT NULL,
@@ -16,7 +17,7 @@ CREATE TABLE IF NOT EXISTS run_events (
   post_state_sha256   CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   prev_event_sha256   CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   event_sha256        CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-  recorded_at         TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  recorded_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (run_id, sequence),
   -- The idempotency guarantee: one accepted choice per key, per run.
   UNIQUE KEY uq_event_idempotency (run_id, idempotency_key)

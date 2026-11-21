@@ -82,8 +82,8 @@ content bundle fails verification.
 ## 3. First deployment
 
 1. **Build** on the workstation:
-   `php bin/build-deploy.php --version=1.2.0`
-   → `build/deploy/boardsim-1.2.0/{docroot,backend}/`, `docroot.zip`, `backend.zip`,
+   `php bin/build-deploy.php --version=1.3.2`
+   → `build/deploy/boardsim-1.3.2/{docroot,backend}/`, `docroot.zip`, `backend.zip`,
    `install.sql`, `cron.txt`, `verify.txt`, `README.txt`.
 2. **Database**: cPanel → MySQL Databases → create the database and user, attach
    with privileges. (cPanel prefixes both with the account username.)
@@ -162,7 +162,9 @@ blank 500.
 `bin/migrate.php` is idempotent and safe at any frequency:
 
 - applies any `migrations/*.sql` not present in `schema_migrations` — including
-  `004_rate_limits.sql`, which the rate limiter needs;
+  `004_rate_limits.sql` for the limiter and `005_release_integrity.sql` for pinned
+  difficulty views, payload-bound idempotency, historical decision snapshots and
+  complete run-integrity hashes;
 - records each migration, so an older copy of a file cannot hide;
 - seeds the three pinned `content_bundles` rows (required before the first run:
   `runs.policy_sha256` is a foreign key to them);
@@ -173,6 +175,12 @@ blank 500.
 The product has no login, which means one POST creates a run and writes rows. The
 front controller therefore applies a fixed one-minute window per client address
 and action (`src/Http/RateLimiter.php`):
+
+At the Cloudflare-locked production origin, the client identity is the validated
+`CF-Connecting-IP` address supplied by Cloudflare. `REMOTE_ADDR` is used only as
+the fallback for local development or when that header is absent or malformed.
+The origin lock is therefore part of the trust boundary: do not expose the origin
+directly while trusting a client-supplied copy of this header.
 
 | Action | Requests per minute | Applies to |
 |---|---:|---|
@@ -187,6 +195,12 @@ from finished windows are swept opportunistically. If `rate_limits` is missing o
 the counter query fails, the limiter **fails open** and logs — availability of the
 exercise matters more than the limit, and `/v1/health` reports `schema: partial`
 until the migration runs.
+
+The PHP boundary also caps JSON bodies at 16 KiB and 16 nesting levels. Profile
+and share requests accept at most 20 submitted run ids, and board submissions at
+most 10 fields; scalar identifiers are validated against their schema widths and
+formats before database access. These are application controls and remain active
+even if the Cloudflare free-plan rules are changed or bypassed in local testing.
 
 Run it every ten minutes on install day, then `0 2 * * *`. `--check` reports
 without writing. It exits non-zero, with the reason, if the database user lacks
@@ -210,9 +224,10 @@ shell references an asset that no longer exists.
   the pre-upload walkthrough stays usable in a browser. The lock is therefore
   proven where it matters: `bin/verify-deploy.php` sends one request **without**
   the header and fails unless the origin answers `403`.
-- MySQL grants and the optional append-only trigger: cPanel usually offers only
+- MySQL grants and the optional no-update trigger: cPanel usually offers only
   ALL PRIVILEGES per database, so `integrity_controls` may truthfully stay
-  `["hash_chain"]`. Add the triggers in phpMyAdmin if `TRIGGER` is permitted, then
+  `["hash_chain"]`. Add the UPDATE guard in phpMyAdmin if `TRIGGER` is permitted;
+  do not add a DELETE guard because whole-run erasure requires it. Then
   reflect it in `/v1/health` and the methodology page.
 - AutoSSL: changing the subdomain's document root invalidates a pending
   validation, so re-run it afterwards. The certificate authority fetches

@@ -14,9 +14,11 @@ use BoardSim\Content\DifficultyViews;
 use BoardSim\Content\OverlayLoader;
 use BoardSim\Content\PinnedScenarios;
 use BoardSim\Content\ScoringPolicyLoader;
+use BoardSim\Domain\Run\DomainError;
 use BoardSim\Domain\Run\InMemoryRunStore;
 use BoardSim\Domain\Run\RunService;
 use BoardSim\Http\ApiRouter;
+use BoardSim\Http\RequestBody;
 
 // Pinned before any output, exactly as the HTTP entry points pin it: PHP
 // refuses session ini changes once output has started, which is why the
@@ -59,6 +61,23 @@ function assertThat(string $label, bool $condition, string $detail = ''): void
 
     $failed++;
     printf("  FAIL  %s%s\n", $label, $detail === '' ? '' : " ({$detail})");
+}
+
+function expectDomainError(string $label, callable $operation, int $status, string $code): void
+{
+    try {
+        $operation();
+    } catch (DomainError $e) {
+        assertThat(
+            $label,
+            $e->httpStatus === $status && $e->errorCode === $code,
+            "status={$e->httpStatus}, code={$e->errorCode}"
+        );
+
+        return;
+    }
+
+    assertThat($label, false, 'no error raised');
 }
 
 /**
@@ -136,7 +155,63 @@ $service = new RunService(
 
 $router = new ApiRouter($service, $pinned);
 
-echo "== Read endpoints ==\n";
+echo "== Bounded JSON request body ==\n";
+assertThat(
+    'an empty request body is an empty object payload',
+    RequestBody::decode('') === []
+);
+assertThat(
+    'a JSON object inside the byte and depth limits is accepted',
+    RequestBody::decode('{"scenario_id":"BS-001"}') === ['scenario_id' => 'BS-001']
+);
+expectDomainError(
+    'a declared body above 16 KiB is rejected before reading',
+    static fn () => RequestBody::read(['CONTENT_LENGTH' => (string) (RequestBody::MAX_BYTES + 1)]),
+    413,
+    'PAYLOAD_TOO_LARGE'
+);
+expectDomainError(
+    'an undeclared body above 16 KiB is rejected after the bounded read',
+    static function (): void {
+        $path = tempnam(sys_get_temp_dir(), 'boardsim-body-');
+
+        if ($path === false) {
+            throw new RuntimeException('Could not create request-body fixture');
+        }
+
+        try {
+            file_put_contents($path, str_repeat('x', RequestBody::MAX_BYTES + 1));
+            RequestBody::read([], $path);
+        } finally {
+            @unlink($path);
+        }
+    },
+    413,
+    'PAYLOAD_TOO_LARGE'
+);
+expectDomainError(
+    'JSON deeper than 16 levels is rejected',
+    static fn () => RequestBody::decode(
+        '{"a":' . str_repeat('[', RequestBody::MAX_DEPTH) . '0'
+        . str_repeat(']', RequestBody::MAX_DEPTH) . '}'
+    ),
+    400,
+    'INVALID_REQUEST'
+);
+expectDomainError(
+    'a top-level JSON array is rejected',
+    static fn () => RequestBody::decode('["BS-001"]'),
+    400,
+    'INVALID_REQUEST'
+);
+expectDomainError(
+    'a malformed Content-Length is rejected',
+    static fn () => RequestBody::read(['CONTENT_LENGTH' => '12x']),
+    400,
+    'INVALID_REQUEST'
+);
+
+echo "\n== Read endpoints ==\n";
 $health = expect('GET /v1/health', $router->handle('GET', '/v1/health', []), 200);
 assertThat('health carries the three pins', isset(
     $health['policy_sha256'],
@@ -181,6 +256,7 @@ assertThat(
         && is_string($difficulties['difficulties'][2]['unavailable_reason'])
 );
 expect('unknown route', $router->handle('GET', '/v1/nope', []), 404);
+expect('a malformed run id is rejected before lookup', $router->handle('GET', '/v1/runs/not-a-uuid', []), 400);
 
 echo "\n== Run lifecycle over HTTP ==\n";
 $run = expect(
@@ -201,8 +277,35 @@ expect('POST board_crisis', $router->handle('POST', '/v1/runs', [
     'scenario_id' => 'BS-003',
     'difficulty' => 'board_crisis',
 ]), 422);
+expect('POST with a non-string scenario id', $router->handle('POST', '/v1/runs', [
+    'scenario_id' => ['BS-003'],
+]), 400);
+expect('POST with an impossible date', $router->handle('POST', '/v1/runs', [
+    'scenario_id' => 'BS-003',
+    'date_of_simulation' => '2026-02-30',
+]), 400);
 
 expect('GET /v1/runs/{id}', $router->handle('GET', '/v1/runs/' . $runId, []), 200);
+expect('an overlong idempotency key is rejected', $router->handle(
+    'POST',
+    "/v1/runs/{$runId}/decisions",
+    ['idempotency_key' => str_repeat('a', 37), 'stage_id' => 'S1', 'choice_id' => 'A']
+), 400);
+
+$tooManySelections = [];
+for ($i = 0; $i < 11; $i++) {
+    $tooManySelections['field_' . $i] = 'OPTION';
+}
+expect('a board object above 10 fields is rejected', $router->handle(
+    'POST',
+    "/v1/runs/{$runId}/board",
+    ['selections' => $tooManySelections]
+), 400);
+expect('an overlong board field identifier is rejected', $router->handle(
+    'POST',
+    "/v1/runs/{$runId}/board",
+    ['selections' => [str_repeat('a', 25) => 'OPTION']]
+), 400);
 
 foreach ([['S1', 'B'], ['S2', 'B'], ['S3', 'A']] as $index => [$stage, $choice]) {
     $response = expect(
@@ -261,7 +364,7 @@ for ($i = 0; $i < 2; $i++) {
 
     foreach (['S1' => 'C', 'S2' => 'C', 'S3' => 'C'] as $stage => $choice) {
         $router->handle('POST', "/v1/runs/{$extraId}/decisions", [
-            'idempotency_key' => $extraId . '-' . $stage,
+            'idempotency_key' => substr(hash('sha256', $extraId . '-' . $stage), 0, 36),
             'stage_id' => $stage,
             'choice_id' => $choice,
         ]);
@@ -288,6 +391,16 @@ printf(
 
 expect('POST /v1/profiles with no run_ids', $router->handle('POST', '/v1/profiles', []), 400);
 expect('POST /v1/profiles with an empty list', $router->handle('POST', '/v1/profiles', ['run_ids' => []]), 400);
+expect('POST /v1/profiles requires a JSON array', $router->handle(
+    'POST',
+    '/v1/profiles',
+    ['run_ids' => ['first' => $runId]]
+), 400);
+expect('POST /v1/profiles caps submitted run ids at 20', $router->handle(
+    'POST',
+    '/v1/profiles',
+    ['run_ids' => array_fill(0, 21, $runId)]
+), 400);
 expect(
     'POST /v1/profiles below the window',
     $router->handle('POST', '/v1/profiles', ['run_ids' => [$runId]]),
@@ -508,7 +621,7 @@ $victimId = (string) $victim['run_id'];
 
 foreach (['S1' => 'C', 'S2' => 'C', 'S3' => 'C'] as $stage => $choice) {
     $router->handle('POST', "/v1/runs/{$victimId}/decisions", [
-        'idempotency_key' => $victimId . '-' . $stage,
+        'idempotency_key' => substr(hash('sha256', $victimId . '-' . $stage), 0, 36),
         'stage_id' => $stage,
         'choice_id' => $choice,
     ]);

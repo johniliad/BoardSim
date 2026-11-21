@@ -40,8 +40,18 @@ as out of scope; the analysis is the valuable part, not the volume.
   accounts to attack, so participant data is the asset.
 - Anything that defeats a control this repository claims to have: the
   Cloudflare origin lock, the security-header policy and its CSP, the rate
-  limiter, the hash-chained event log, the erasure path, or the zero-dependency
+  limiter, the run-integrity hashes, the erasure path, or the zero-dependency
   boundary of the API.
+
+The run-integrity check covers persisted decision evidence, event links, state
+transitions, immutable run configuration and release pins, board selections, and
+score/dimension reconstruction. It is not a digital signature and does not defend
+against a privileged attacker who can rewrite both records and hashes coherently.
+Reports that demonstrate an integrity claim exceeding that scope are in scope.
+
+The API rejects JSON request bodies above **16 KiB**, nesting deeper than **16**
+levels, non-object top-level JSON, overlong identifiers, and oversized profile or
+board collections before they can drive unbounded persistence work.
 
 ## Out of scope
 
@@ -96,9 +106,10 @@ historical artefacts, not supported software.
 ## Data protection notes
 
 BoardSim stores participant data with no identity attached: no name, no email,
-no account. Erasure is self-service and irreversible (`DELETE /v1/runs/{id}`),
-share links expire after seven days and can be revoked by their owner, and the
-full retention model is documented in
+and no account. Erasure is self-service and irreversible (`DELETE /v1/runs/{id}`),
+share links expire after at most seven days (sooner when the oldest selected run
+reaches its deletion deadline) and can be revoked by their owner, and the full
+retention model is documented in
 [`docs/profiles-and-retention.md`](docs/profiles-and-retention.md). If your
 report involves personal data, say so at the top: it will be handled under
 GDPR timelines, not the disclosure timeline above.
