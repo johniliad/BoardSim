@@ -123,6 +123,10 @@ if ($gitStatus !== 0) {
         '#\.sql\.(gz|zip)$#',
         '#(^|/)\.(idea|vscode|claude|cursor|windsurf|specstory|history|roo)/#',
         '#\.DS_Store$#',
+        // Internal working papers that sit inside the published specification
+        // directory but are not part of it. They are gitignored as well; this
+        // entry is what turns a quiet re-add into a failing check.
+        '#^requirements/(11_agent_instructions_improve_wording|OWASP_Secure_Coding_Instructions)[.]md$#',
     ];
 
     $leaks = [];

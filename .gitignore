@@ -121,6 +121,13 @@ coverage.xml
 # The specification is published: requirements/ is committed so a reader can
 # audit the claims the product makes. It is SHA-256 pinned, so it is never
 # edited in place — see requirements/08_CONTENT_GOVERNANCE.md.
+#
+# Two documents sit beside the published specification but are not part of it:
+# the internal agent-instruction draft and the third-party OWASP aide-mémoire.
+# They stay on this machine only. bin/verify-hygiene.php carries the same two
+# paths, so re-adding one fails CI instead of shipping quietly.
+/requirements/11_agent_instructions_improve_wording.md
+/requirements/OWASP_Secure_Coding_Instructions.md
 
 # ─── Local notes and machine-specific overrides ─────────────────────────────
 # Drafts, dumps and overrides live beside the work but are not the work.
