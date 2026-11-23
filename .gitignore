@@ -33,6 +33,7 @@ secrets.php
 .deploy-credentials
 .clinerules
 requirements/
+/requirements/
 
 # ─── Deployment target (host paths, never committed) ────────────────────────
 # deploy/host.config.example.php is the committed template; the real file holds
