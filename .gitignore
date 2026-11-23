@@ -31,6 +31,8 @@ secrets.php
 # the host, never here). See requirements/12_CLOUDFLARE_ORIGIN_LOCK.md.
 *.secret
 .deploy-credentials
+.clinerules
+requirements/
 
 # ─── Deployment target (host paths, never committed) ────────────────────────
 # deploy/host.config.example.php is the committed template; the real file holds
