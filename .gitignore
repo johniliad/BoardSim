@@ -32,8 +32,6 @@ secrets.php
 *.secret
 .deploy-credentials
 .clinerules
-requirements/
-/requirements/
 
 # ─── Deployment target (host paths, never committed) ────────────────────────
 # deploy/host.config.example.php is the committed template; the real file holds
@@ -120,24 +118,9 @@ coverage.xml
 /tmp/
 /scratch/
 
-# ─── Specification package ──────────────────────────────────────────────────
-# requirements/ is the internal specification package: the scoring model, the
-# decision rules, the regulatory register and the pinned manifest. It is edited
-# on this machine and deployed to the backend, but it is not part of what this
-# repository publishes going forward.
-#
-# Two things to be clear about:
-#   1. An ignore rule does not untrack anything. The 30 files listed in
-#      requirements/SHA256_MANIFEST.md are already committed and stay committed,
-#      and they stay in the history, until they are removed from the index with
-#      `git rm -r --cached requirements/`.
-#   2. If you do remove them, three things follow: `php bin/verify-manifest.php`
-#      (CI job "Pinned manifest") fails in every fresh clone, the runtime engine
-#      has no requirements/03_DECISION_RULES.md to parse, and DEPLOYMENT.md's
-#      links into requirements/ dangle. Remove the manifest job from
-#      .github/workflows/ci.yml at the same time, and keep a private copy for the
-#      build, which copies requirements/ into the backend artefact.
-requirements/
+# The specification is published: requirements/ is committed so a reader can
+# audit the claims the product makes. It is SHA-256 pinned, so it is never
+# edited in place — see requirements/08_CONTENT_GOVERNANCE.md.
 
 # ─── Local notes and machine-specific overrides ─────────────────────────────
 # Drafts, dumps and overrides live beside the work but are not the work.

@@ -1,6 +1,6 @@
 # BoardSim overlay layer — authored, versioned, never part of the pinned bundle
 
-The 29 Markdown files under `requirements/`, `scenarios/` and `engine/` are
+The 30 Markdown files under `requirements/`, `scenarios/` and `engine/` are
 SHA-256 pinned and immutable (`SHA256_MANIFEST.md`, `08_CONTENT_GOVERNANCE.md`).
 Everything in this directory is additive: the loader merges it with the pinned
 files at load time and never rewrites them.

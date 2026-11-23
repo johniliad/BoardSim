@@ -108,10 +108,11 @@ methodology (formula, weights, appetite modifiers, bands) is served at
 `/v1/methodology` and rendered at `#/methodology`, and every rule, instrument
 and dimension is defined once in `/v1/glossary`.
 
-The 29 Markdown files in `requirements/`, `scenarios/` and `engine/` are the
-specification and are **SHA-256 pinned and immutable** (28 design documents plus
-`10_OPEN_SOURCE.md`, the repository-hygiene requirement). Nothing here edits them;
-every addition is either code or a versioned overlay.
+The 30 Markdown files in `requirements/`, `scenarios/` and `engine/` are the
+specification and are **SHA-256 pinned and immutable** (`SHA256_MANIFEST.md`
+lists every one, including `10_OPEN_SOURCE.md`, the repository-hygiene
+requirement). Nothing here edits them; every addition is either code or a
+versioned overlay.
 
 Line endings are pinned too: `.gitattributes` normalises every text file to LF,
 because a CRLF checkout on Windows would change the bytes and break verification
